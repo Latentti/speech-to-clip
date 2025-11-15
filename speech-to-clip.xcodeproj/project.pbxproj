@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		EDAED1192EC4EFD9007BDB87 /* HotKey in Frameworks */ = {isa = PBXBuildFile; productRef = EDAED1182EC4EFD9007BDB87 /* HotKey */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		EDAED0ED2EC4E980007BDB87 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -45,6 +49,36 @@
 			path = "speech-to-clipUITests";
 			sourceTree = "<group>";
 		};
+		EDAED1092EC4EAD8007BDB87 /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = App;
+			sourceTree = "<group>";
+		};
+		EDAED10E2EC4EB29007BDB87 /* Core */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Core;
+			sourceTree = "<group>";
+		};
+		EDAED1132EC4EB98007BDB87 /* Features */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Features;
+			sourceTree = "<group>";
+		};
+		EDAED1142EC4EBA9007BDB87 /* Models */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Models;
+			sourceTree = "<group>";
+		};
+		EDAED1152EC4EBB8007BDB87 /* Services */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Services;
+			sourceTree = "<group>";
+		};
+		EDAED1162EC4EBC9007BDB87 /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Resources;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +86,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EDAED1192EC4EFD9007BDB87 /* HotKey in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,6 +110,12 @@
 		EDAED0D62EC4E97F007BDB87 = {
 			isa = PBXGroup;
 			children = (
+				EDAED1162EC4EBC9007BDB87 /* Resources */,
+				EDAED1152EC4EBB8007BDB87 /* Services */,
+				EDAED1142EC4EBA9007BDB87 /* Models */,
+				EDAED1132EC4EB98007BDB87 /* Features */,
+				EDAED10E2EC4EB29007BDB87 /* Core */,
+				EDAED1092EC4EAD8007BDB87 /* App */,
 				EDAED0E12EC4E97F007BDB87 /* speech-to-clip */,
 				EDAED0EF2EC4E980007BDB87 /* speech-to-clipTests */,
 				EDAED0F92EC4E980007BDB87 /* speech-to-clipUITests */,
@@ -109,9 +150,16 @@
 			);
 			fileSystemSynchronizedGroups = (
 				EDAED0E12EC4E97F007BDB87 /* speech-to-clip */,
+				EDAED1092EC4EAD8007BDB87 /* App */,
+				EDAED10E2EC4EB29007BDB87 /* Core */,
+				EDAED1132EC4EB98007BDB87 /* Features */,
+				EDAED1142EC4EBA9007BDB87 /* Models */,
+				EDAED1152EC4EBB8007BDB87 /* Services */,
+				EDAED1162EC4EBC9007BDB87 /* Resources */,
 			);
 			name = "speech-to-clip";
 			packageProductDependencies = (
+				EDAED1182EC4EFD9007BDB87 /* HotKey */,
 			);
 			productName = "speech-to-clip";
 			productReference = EDAED0DF2EC4E97F007BDB87 /* speech-to-clip.app */;
@@ -195,6 +243,9 @@
 			);
 			mainGroup = EDAED0D62EC4E97F007BDB87;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				EDAED1172EC4EFD9007BDB87 /* XCRemoteSwiftPackageReference "HotKey" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EDAED0E02EC4E97F007BDB87 /* Products */;
 			projectDirPath = "";
@@ -394,6 +445,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "speech-to-clip.entitlements";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -403,14 +456,18 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "speech-to-clip needs accessibility access to paste transcribed text into your active application.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "speech-to-clip needs microphone access to record your voice for transcription.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.latentti.speech-to-clip";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Speech to Clip";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -426,6 +483,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "speech-to-clip.entitlements";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -435,14 +494,18 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "speech-to-clip needs accessibility access to paste transcribed text into your active application.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "speech-to-clip needs microphone access to record your voice for transcription.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.latentti.speech-to-clip";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Speech to Clip";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -573,6 +636,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		EDAED1172EC4EFD9007BDB87 /* XCRemoteSwiftPackageReference "HotKey" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/soffes/HotKey";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		EDAED1182EC4EFD9007BDB87 /* HotKey */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EDAED1172EC4EFD9007BDB87 /* XCRemoteSwiftPackageReference "HotKey" */;
+			productName = HotKey;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = EDAED0D72EC4E97F007BDB87 /* Project object */;
 }
