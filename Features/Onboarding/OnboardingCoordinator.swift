@@ -78,12 +78,12 @@ class OnboardingCoordinator: ObservableObject {
     /// Move to the next step in the onboarding flow
     func moveToNextStep() {
         withAnimation {
-            if currentStep < 4 {
+            if currentStep < 5 {
                 currentStep += 1
             }
         }
 
-        // Start polling accessibility permission when entering step 3
+        // Start polling accessibility permission when entering step 3 (Accessibility)
         if currentStep == 2 {
             startAccessibilityPolling()
         } else {
@@ -209,18 +209,19 @@ class OnboardingCoordinator: ObservableObject {
     /// - Parameters:
     ///   - apiKey: The OpenAI API key
     ///   - profileName: Name for the profile
+    ///   - language: Language code for transcription (e.g., "fi", "en")
     /// - Throws: ProfileError if profile creation fails
-    func saveAPIKey(_ apiKey: String, profileName: String) throws {
+    func saveAPIKey(_ apiKey: String, profileName: String, language: String) throws {
         // Validate API key format (basic check)
         guard !apiKey.isEmpty else {
             throw ProfileError.invalidProfileData
         }
 
-        // Create profile with API key
+        // Create profile with API key and selected language
         let profile = try profileManager.createProfile(
             name: profileName,
             apiKey: apiKey,
-            language: WhisperLanguage.english.rawValue
+            language: language
         )
 
         // Set as active profile

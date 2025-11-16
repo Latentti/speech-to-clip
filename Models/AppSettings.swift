@@ -45,6 +45,10 @@ struct AppSettings: Codable {
     /// If onboarding flow changes significantly, version mismatch can trigger re-onboarding
     var onboardingVersion: String = "1.0"
 
+    /// Default transcription language for new profiles
+    /// Story 8.2: Set during onboarding, used as default for API calls when no profile is active
+    var defaultLanguage: WhisperLanguage = .english
+
     /// Default initializer with all default values
     init(
         activeProfileID: UUID? = nil,
@@ -54,7 +58,8 @@ struct AppSettings: Codable {
         hotkey: HotkeyConfig = .default,
         onboardingCompleted: Bool = false,
         tutorialCompleted: Bool = false,
-        onboardingVersion: String = "1.0"
+        onboardingVersion: String = "1.0",
+        defaultLanguage: WhisperLanguage = .english
     ) {
         self.activeProfileID = activeProfileID
         self.enableTranslation = enableTranslation
@@ -64,5 +69,6 @@ struct AppSettings: Codable {
         self.onboardingCompleted = onboardingCompleted
         self.tutorialCompleted = tutorialCompleted
         self.onboardingVersion = onboardingVersion
+        self.defaultLanguage = defaultLanguage
     }
 }

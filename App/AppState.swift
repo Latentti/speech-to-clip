@@ -364,6 +364,17 @@ class AppState: ObservableObject {
             print("❌ Failed to stop recording: \(error.localizedDescription)")
             recordingState = .error(error)
             lastError = error
+            currentAmplitude = 0.0
+
+            // Auto-reset to idle after 3 seconds to allow retry
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                guard let self = self else { return }
+                // Only reset if still in error state (not if user started new recording)
+                if case .error = self.recordingState {
+                    self.recordingState = .idle
+                    print("🔄 Auto-reset to idle state after stopRecording error")
+                }
+            }
         }
     }
 
@@ -545,12 +556,25 @@ class AppState: ObservableObject {
                 guard let self = self else { return }
 
                 // When onboarding closes (changes from true to false)
-                // Show tutorial if it hasn't been completed yet
-                if previousShowOnboarding && !isShowing && !self.settings.tutorialCompleted {
-                    // Small delay to allow onboarding window to fully dismiss
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.showTutorialPrompt = true
-                        print("ℹ️ Onboarding complete - showing tutorial prompt")
+                // Reload active profile and show tutorial if needed
+                if previousShowOnboarding && !isShowing {
+                    // Reload active profile (user may have created one during onboarding)
+                    do {
+                        self.currentProfile = try self.profileManager.getActiveProfile()
+                        if let profile = self.currentProfile {
+                            print("✅ Reloaded active profile after onboarding: \(profile.name)")
+                        }
+                    } catch {
+                        print("⚠️ No active profile found after onboarding")
+                    }
+
+                    // Show tutorial if it hasn't been completed yet
+                    if !self.settings.tutorialCompleted {
+                        // Small delay to allow onboarding window to fully dismiss
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self.showTutorialPrompt = true
+                            print("ℹ️ Onboarding complete - showing tutorial prompt")
+                        }
                     }
                 }
 

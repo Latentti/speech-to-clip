@@ -10,12 +10,13 @@ import SwiftUI
 
 /// Multi-step onboarding view for first-time users
 ///
-/// Displays a 5-step guided flow:
+/// Displays a 6-step guided flow:
 /// 1. Welcome and app explanation
 /// 2. Microphone permission request
 /// 3. Accessibility permission request
-/// 4. API key profile setup
-/// 5. Success confirmation
+/// 4. Language selection
+/// 5. API key profile setup
+/// 6. Success confirmation
 struct OnboardingView: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +25,7 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             // Progress indicator
             HStack(spacing: 8) {
-                ForEach(0..<5) { index in
+                ForEach(0..<6) { index in
                     Circle()
                         .fill(index == coordinator.currentStep ? Color.accentColor : Color.gray.opacity(0.3))
                         .frame(width: 8, height: 8)
@@ -44,11 +45,14 @@ struct OnboardingView: View {
                 AccessibilityStepView(coordinator: coordinator)
                     .tag(2)
 
-                APIKeyStepView(coordinator: coordinator)
+                LanguageStepView(coordinator: coordinator)
                     .tag(3)
 
-                SuccessStepView(coordinator: coordinator, dismiss: dismiss)
+                APIKeyStepView(coordinator: coordinator)
                     .tag(4)
+
+                SuccessStepView(coordinator: coordinator, dismiss: dismiss)
+                    .tag(5)
             }
             .tabViewStyle(.automatic)
             .frame(width: 500, height: 400)
@@ -332,10 +336,73 @@ struct AccessibilityStepView: View {
     }
 }
 
-// MARK: - Step 4: API Key Setup
+// MARK: - Step 4: Language Selection
+
+struct LanguageStepView: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "globe")
+                .font(.system(size: 60))
+                .foregroundColor(.accentColor)
+
+            Text("Choose Your Language")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            Text("Select the language you'll be speaking for transcription. You can change this later in Settings.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 40)
+
+            // Language picker
+            VStack(spacing: 8) {
+                Picker("Transcription Language", selection: $appState.settings.defaultLanguage) {
+                    ForEach(WhisperLanguage.sortedByDisplayName, id: \.id) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 300)
+
+                Text("Selected: \(appState.settings.defaultLanguage.displayName)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 60)
+
+            Spacer()
+
+            HStack {
+                Button("Back") {
+                    coordinator.moveToPreviousStep()
+                }
+                .buttonStyle(.link)
+
+                Spacer()
+
+                Button("Continue") {
+                    coordinator.moveToNextStep()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+            .padding(.horizontal, 40)
+            .padding(.bottom, 20)
+        }
+    }
+}
+
+// MARK: - Step 5: API Key Setup
 
 struct APIKeyStepView: View {
     @ObservedObject var coordinator: OnboardingCoordinator
+    @EnvironmentObject var appState: AppState
     @State private var apiKey: String = ""
     @State private var profileName: String = "Default Profile"
     @State private var showError: Bool = false
@@ -353,37 +420,55 @@ struct APIKeyStepView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Enter your OpenAI API key to enable Whisper transcription.")
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 40)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Profile Name")
-                    .font(.caption)
+            if coordinator.hasAPIKey {
+                // API key already configured - show confirmation
+                Text("Your API key is already configured and ready to use.")
+                    .font(.body)
+                    .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
+                    .padding(.horizontal, 40)
 
-                TextField("e.g., Default Profile", text: $profileName)
-                    .textFieldStyle(.roundedBorder)
-
-                Text("API Key")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                SecureField("sk-...", text: $apiKey)
-                    .textFieldStyle(.roundedBorder)
-
-                if showError {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundColor(.red)
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("API key configured")
+                        .foregroundColor(.secondary)
                 }
-            }
-            .padding(.horizontal, 60)
+                .padding(.vertical, 20)
+            } else {
+                // No API key - show input fields
+                Text("Enter your OpenAI API key to enable Whisper transcription.")
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 40)
 
-            Link("Get an API key from OpenAI", destination: URL(string: "https://platform.openai.com/api-keys")!)
-                .font(.caption)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Profile Name")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    TextField("e.g., Default Profile", text: $profileName)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text("API Key")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    SecureField("sk-...", text: $apiKey)
+                        .textFieldStyle(.roundedBorder)
+
+                    if showError {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+                .padding(.horizontal, 60)
+
+                Link("Get an API key from OpenAI", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                    .font(.caption)
+            }
 
             Spacer()
 
@@ -393,23 +478,53 @@ struct APIKeyStepView: View {
                 }
                 .buttonStyle(.link)
 
-                Button("Skip for Now") {
-                    coordinator.skip()
+                if !coordinator.hasAPIKey {
+                    Button("Skip for Now") {
+                        coordinator.skip()
+                    }
+                    .buttonStyle(.link)
                 }
-                .buttonStyle(.link)
 
                 Spacer()
 
                 Button(coordinator.hasAPIKey ? "Continue" : "Save & Continue") {
-                    if apiKey.isEmpty {
+                    if coordinator.hasAPIKey {
+                        // Already has API key - just continue
+                        print("🔵 Continue button clicked - hasAPIKey: \(coordinator.hasAPIKey), currentStep: \(coordinator.currentStep)")
+                        coordinator.moveToNextStep()
+                    } else if apiKey.isEmpty {
                         // Allow skipping without API key
                         coordinator.moveToNextStep()
                     } else {
-                        // Save API key
+                        // Validate profile name is not empty
+                        let trimmedName = profileName.trimmingCharacters(in: .whitespaces)
+                        if trimmedName.isEmpty {
+                            showError = true
+                            errorMessage = "Profile name cannot be empty"
+                            return
+                        }
+
+                        // Save API key with selected language from onboarding
                         do {
-                            try coordinator.saveAPIKey(apiKey, profileName: profileName)
+                            try coordinator.saveAPIKey(
+                                apiKey,
+                                profileName: trimmedName,
+                                language: appState.settings.defaultLanguage.rawValue
+                            )
                             showError = false
-                            coordinator.moveToNextStep()
+                            // Small delay to ensure @Published hasAPIKey updates before navigation
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                coordinator.moveToNextStep()
+                            }
+                        } catch let error as ProfileError {
+                            // Handle duplicate profile name gracefully
+                            if case .duplicateProfileName = error {
+                                showError = true
+                                errorMessage = "Profile '\(trimmedName)' already exists. Please choose a different name."
+                            } else {
+                                showError = true
+                                errorMessage = error.localizedDescription
+                            }
                         } catch {
                             showError = true
                             errorMessage = error.localizedDescription
@@ -423,12 +538,17 @@ struct APIKeyStepView: View {
             .padding(.bottom, 20)
         }
         .onAppear {
-            coordinator.refreshAPIKeyStatus()
+            // Reset fields only if no API key exists and fields have been modified
+            // coordinator.hasAPIKey is already set correctly from init() and updates automatically
+            if !coordinator.hasAPIKey {
+                apiKey = ""
+                profileName = "Default Profile"
+            }
         }
     }
 }
 
-// MARK: - Step 5: Success
+// MARK: - Step 6: Success
 
 struct SuccessStepView: View {
     @ObservedObject var coordinator: OnboardingCoordinator
