@@ -52,10 +52,11 @@ struct SettingsView: View {
                 }
                 .tag(1)
 
-            // Advanced Tab (placeholder)
-            AdvancedTabPlaceholder()
+            // About Tab - Story 9.1
+            AboutTab()
+                .environmentObject(appState)
                 .tabItem {
-                    Label("Advanced", systemImage: "slider.horizontal.3")
+                    Label("About", systemImage: "info.circle")
                 }
                 .tag(2)
         }
@@ -88,27 +89,6 @@ private struct GeneralTabPlaceholder: View {
     }
 }
 
-/// Placeholder view for Advanced tab
-///
-/// This provides space for future advanced settings
-private struct AdvancedTabPlaceholder: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Advanced Settings")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Advanced configuration options will be added in future stories")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 400)
-
-            Spacer()
-        }
-        .padding()
-    }
-}
 
 // MARK: - Preview
 

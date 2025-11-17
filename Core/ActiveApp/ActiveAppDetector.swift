@@ -70,6 +70,9 @@ class ActiveAppDetector {
     /// **Important:** If accessibility permission is not granted, acceptsTextInput will be false.
     /// The application name and bundle ID are still available without permission.
     ///
+    /// **Whitelist:** Some applications (Terminal, iTerm2, code editors) are whitelisted because
+    /// they don't properly report focused text elements via AX API.
+    ///
     /// - Returns: ActiveAppInfo if an application is active, nil if no application is frontmost
     /// - Throws: ActiveAppError if an error occurs during detection
     ///
@@ -84,7 +87,48 @@ class ActiveAppDetector {
         let appName = app.localizedName ?? "Unknown Application"
         let bundleID = app.bundleIdentifier ?? "unknown.bundle.id"
 
-        // Check if focused element accepts text input
+        // Whitelist of applications that accept text but don't report it via AX API
+        // This includes Electron apps and terminals that don't properly support accessibility
+        let alwaysAcceptsTextBundleIDs = [
+            // Terminals
+            "com.apple.Terminal",           // macOS Terminal
+            "com.googlecode.iterm2",        // iTerm2
+
+            // Code Editors
+            "com.microsoft.VSCode",         // VS Code
+            "com.todesktop.230313mzl4w4u92", // Cursor
+            "com.github.atom",              // Atom
+            "com.sublimetext.4",            // Sublime Text
+            "com.jetbrains.intellij",       // IntelliJ IDEA
+            "com.jetbrains.pycharm",        // PyCharm
+            "com.jetbrains.WebStorm",       // WebStorm
+            "org.vim.MacVim",               // MacVim
+            "com.panic.Coda2",              // Coda
+            "com.barebones.bbedit",         // BBEdit
+
+            // Communication Apps (Electron-based)
+            "com.tinyspeck.slackmacgap",    // Slack
+            "com.hnc.Discord",              // Discord
+            "com.microsoft.teams",          // Microsoft Teams
+            "us.zoom.xos",                  // Zoom
+
+            // Note-taking Apps
+            "com.electron.notion",          // Notion
+            "md.obsidian",                  // Obsidian
+            "com.apple.Notes",              // Apple Notes
+        ]
+
+        // Check if this app is whitelisted
+        if alwaysAcceptsTextBundleIDs.contains(bundleID) {
+            print("✅ App is whitelisted for paste: \(appName) (\(bundleID))")
+            return ActiveAppInfo(
+                appName: appName,
+                bundleID: bundleID,
+                acceptsTextInput: true
+            )
+        }
+
+        // Check if focused element accepts text input via AX API
         let acceptsTextInput: Bool
         do {
             acceptsTextInput = try checkFocusedElementIsTextField()
@@ -93,8 +137,12 @@ class ActiveAppDetector {
             // This allows caller to show permission request dialog
             throw ActiveAppError.accessibilityPermissionDenied
         } catch {
-            // Other errors (focused element not accessible, etc.) - assume no text input
-            acceptsTextInput = false
+            // AX API failed (error -25204 etc.) - likely an Electron app or other app
+            // that doesn't properly report focused elements via Accessibility API.
+            // Allow paste attempt and let the paste operation itself validate.
+            // This provides better UX than blocking paste for apps not on whitelist.
+            print("⚠️ AX API check failed for \(appName) (\(bundleID)), allowing paste attempt")
+            acceptsTextInput = true
         }
 
         return ActiveAppInfo(
@@ -117,8 +165,11 @@ class ActiveAppDetector {
     private func checkFocusedElementIsTextField() throws -> Bool {
         // Check accessibility permission before attempting AX API calls
         guard AXIsProcessTrusted() else {
+            print("🔍 AX permission check failed in checkFocusedElementIsTextField")
             throw ActiveAppError.accessibilityPermissionDenied
         }
+
+        print("🔍 Starting focused element check...")
 
         // Create system-wide accessibility element
         let systemElement = AXUIElementCreateSystemWide()
@@ -131,11 +182,16 @@ class ActiveAppDetector {
             &focusedElement
         )
 
+        print("🔍 Focused element query result: \(focusedResult.rawValue)")
+
         // Check if we successfully got the focused element
         guard focusedResult == .success, let element = focusedElement else {
             // No focused element or AX API call failed
-            return false
+            print("🔍 No focused element found or AX API call failed")
+            throw ActiveAppError.focusedElementNotAccessible
         }
+
+        print("🔍 Focused element found, getting role...")
 
         // Get the role attribute of the focused element
         var role: CFTypeRef?
@@ -145,10 +201,16 @@ class ActiveAppDetector {
             &role
         )
 
+        print("🔍 Role query result: \(roleResult.rawValue)")
+
         guard roleResult == .success, let roleValue = role as? String else {
             // Couldn't get role - assume not a text field
+            print("⚠️ Could not get AX role for focused element")
             return false
         }
+
+        // Debug: Log the actual role we detected
+        print("🔍 Focused element AX role: \(roleValue)")
 
         // Check if role is one of the text input types
         let textInputRoles = [
@@ -157,7 +219,10 @@ class ActiveAppDetector {
             kAXComboBoxRole as String
         ]
 
-        return textInputRoles.contains(roleValue)
+        let isTextInput = textInputRoles.contains(roleValue)
+        print("🔍 Is text input role? \(isTextInput)")
+
+        return isTextInput
     }
 }
 

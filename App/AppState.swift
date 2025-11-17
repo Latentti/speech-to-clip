@@ -492,16 +492,19 @@ class AppState: ObservableObject {
                     AlertHelper.showAccessibilityFallbackNotification()
                 }
             } catch let error as PasteError {
-                // Handle PasteManager errors with user notification
-                print("⚠️ Paste failed: \(error.localizedDescription)")
+                // Silent fallback: text is already on clipboard, no need to notify user
+                // Paste errors are expected when apps don't support programmatic paste
+                print("⚠️ Paste failed (silent fallback to clipboard): \(error.localizedDescription)")
+
+                // Only show permission error if accessibility permission is missing
                 if case .permissionDenied = error {
-                    // Story 8.3 AC 3: Show user-friendly notification about accessibility fallback
                     print("⚠️ Accessibility permission denied - paste unavailable")
                     AlertHelper.showAccessibilityFallbackNotification()
                 }
+                // All other paste errors are silent - user has text on clipboard
             } catch {
-                // Catch any other unexpected errors
-                print("⚠️ Unexpected paste error: \(error.localizedDescription)")
+                // Catch any other unexpected errors (silent fallback)
+                print("⚠️ Unexpected paste error (silent fallback to clipboard): \(error.localizedDescription)")
             }
 
             // Transition to success state

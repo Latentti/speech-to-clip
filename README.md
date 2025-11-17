@@ -11,7 +11,7 @@ A macOS menu bar application that transcribes speech to text using OpenAI's Whis
 - 🎤 **Voice Recording** - Press a hotkey (default: Control+Space) to start/stop recording
 - 🌊 **Wave Visualizer** - Floating wave animation on screen edge that responds to your voice amplitude
 - 🤖 **AI Transcription** - Powered by OpenAI Whisper API for accurate speech-to-text
-- 📋 **Auto-Paste** - Automatically pastes transcribed text into your active application
+- 📋 **Smart Auto-Paste** - Intelligently pastes text with seamless clipboard fallback
 - ⚙️ **Customizable Settings** - Configure language, hotkey, and multiple profiles
 - 🔐 **Secure Storage** - API keys stored safely in macOS Keychain
 - 🚀 **Onboarding** - Guided setup for first-time users with permission checks
@@ -88,6 +88,11 @@ Click the menu bar icon → **Settings** to configure:
     - Custom configurations
   - Switch profiles on the fly
 
+- **About Tab**:
+  - View application version
+  - MIT License information
+  - Author credits and GitHub repository link
+
 ## Usage
 
 ### Basic Recording Flow
@@ -97,7 +102,13 @@ Click the menu bar icon → **Settings** to configure:
 3. **Speak** your message - watch the wave visualizer respond to your voice
 4. **Press hotkey** again to stop recording
 5. **Wait** for transcription (usually 1-3 seconds) - wave continues animating
-6. **Done** - text is automatically pasted at your cursor
+6. **Done** - text is copied to clipboard and automatically pasted at your cursor
+
+**Note:** The app uses intelligent paste detection:
+- Text is **always copied to clipboard** as a fallback
+- Auto-paste attempts to paste automatically in supported applications
+- If auto-paste doesn't work, simply press `⌘V` to paste manually
+- No error messages for paste failures - clipboard fallback is seamless
 
 ### Tips for Best Results
 
@@ -146,7 +157,8 @@ speech-to-clip/
 │   │   │   ├── SettingsWindow.swift
 │   │   │   ├── GeneralTab.swift
 │   │   │   ├── HotkeyTab.swift
-│   │   │   └── ProfilesTab.swift
+│   │   │   ├── ProfilesTab.swift
+│   │   │   └── AboutTab.swift
 │   │   └── Onboarding/          # First-run onboarding
 │   │       ├── OnboardingWindow.swift
 │   │       ├── WelcomeView.swift
@@ -289,8 +301,11 @@ xcodebuild test \
 **"Microphone permission denied"**
 - Solution: Open System Settings → Privacy & Security → Microphone → Enable for Speech to Clip
 
-**"Cannot paste - Accessibility permission required"**
-- Solution: Open System Settings → Privacy & Security → Accessibility → Enable for Speech to Clip
+**"Auto-paste not working in some applications"**
+- Solution: Text is automatically copied to clipboard - just press `⌘V` to paste manually
+- Note: Some applications (like Microsoft Outlook) don't support programmatic paste
+- The app intelligently detects text fields in most apps (browsers, terminals, code editors, chat apps)
+- Accessibility permission is required for auto-paste: System Settings → Privacy & Security → Accessibility
 
 **"Network error"**
 - Solution: Check your internet connection and try again
@@ -349,6 +364,12 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Credits
+
+**Created by:** Latentti Oy
+
+**UI Visualization Design:** Janne Passi
 
 ## Acknowledgments
 
