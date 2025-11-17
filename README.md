@@ -380,8 +380,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/speech-to-clip/issues)
-- **Email**: your.email@example.com
+- **Issues**: [GitHub Issues](https://github.com/Latentti/speech-to-clip/issues)
+- **Email**: ari.hietamaki@latentti.fi
 
 ---
 
