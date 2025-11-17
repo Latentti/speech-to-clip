@@ -444,8 +444,8 @@ class AppState: ObservableObject {
                 print("🔄 Starting transcription...")
                 // Call TranscriptionService with audio, API key, and language
                 // Story 7.4: Use effectiveAPIKey (from profile or settings)
-                // Use language from active profile, fallback to "en" if no profile
-                let language = currentProfile?.language ?? WhisperLanguage.english.rawValue
+                // Use language from active profile, fallback to settings.defaultLanguage if no profile
+                let language = currentProfile?.language ?? settings.defaultLanguage.rawValue
                 text = try await transcriptionService.transcribe(
                     audioData: audioData,
                     apiKey: effectiveAPIKey,
@@ -612,6 +612,13 @@ class AppState: ObservableObject {
         settings.tutorialCompleted = true
         settingsService.saveSettings(settings)
         print("✅ Tutorial marked complete - will not show again")
+    }
+
+    /// Save current settings to persistent storage
+    ///
+    /// Used during onboarding to persist language selection and other settings changes
+    func saveSettings() throws {
+        try settingsService.saveSettings(settings)
     }
 
     /// Show congratulations message and mark tutorial complete

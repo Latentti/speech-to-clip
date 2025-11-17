@@ -38,6 +38,9 @@ class MenuBarController: NSObject, NSApplicationDelegate {
     // Story 7.4: Profile management
     private let profileManager = ProfileManager()
 
+    // Recording state observer for menubar icon updates
+    private var recordingStateCancellable: AnyCancellable?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupHotkey()
@@ -45,6 +48,7 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         setupOnboardingWindowObserver()
         setupTutorialWindowObserver()
         setupProfileObservers()
+        setupRecordingStateObserver()
     }
 
     /// Set up NotificationCenter observers for profile changes
@@ -295,6 +299,88 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         tutorialWindow = nil
     }
 
+    /// Set up observer for recording state changes to update menubar icon
+    private func setupRecordingStateObserver() {
+        guard let appState = appState else { return }
+
+        recordingStateCancellable = appState.$recordingState
+            .sink { [weak self] state in
+                self?.updateMenuBarIcon(for: state)
+            }
+    }
+
+    /// Update menubar icon based on recording state
+    /// - Idle: White custom waveform icon
+    /// - Recording/Processing: Lime green custom waveform icon (matches visualizer)
+    /// - Success: Momentary lime green before returning to idle
+    /// - Error: White (idle state)
+    private func updateMenuBarIcon(for state: RecordingState) {
+        guard let button = statusItem?.button else { return }
+
+        switch state {
+        case .idle:
+            // White waveform (template mode for system appearance)
+            button.image = createWaveformIcon(color: nil)
+            button.image?.isTemplate = true
+
+        case .recording, .processing:
+            // Lime green waveform (matches visualizer #32CD32)
+            let limeGreen = NSColor(red: 0.196, green: 0.804, blue: 0.196, alpha: 1.0)
+            button.image = createWaveformIcon(color: limeGreen)
+            button.image?.isTemplate = false
+
+        case .success:
+            // Lime green momentarily (will auto-reset to idle after 2s)
+            let limeGreen = NSColor(red: 0.196, green: 0.804, blue: 0.196, alpha: 1.0)
+            button.image = createWaveformIcon(color: limeGreen)
+            button.image?.isTemplate = false
+
+        case .error:
+            // Back to white (idle state)
+            button.image = createWaveformIcon(color: nil)
+            button.image?.isTemplate = true
+        }
+    }
+
+    /// Create custom waveform icon for menubar
+    /// Simple minimalist design matching the visualizer aesthetic
+    private func createWaveformIcon(color: NSColor?) -> NSImage {
+        let size = NSSize(width: 22, height: 22)
+        let image = NSImage(size: size)
+
+        image.lockFocus()
+
+        let path = NSBezierPath()
+        path.lineWidth = 2.0
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+
+        // Draw simple waveform (3 vertical bars of varying heights)
+        // Left bar (short)
+        path.move(to: NSPoint(x: 5, y: 9))
+        path.line(to: NSPoint(x: 5, y: 13))
+
+        // Middle bar (tall - active)
+        path.move(to: NSPoint(x: 11, y: 6))
+        path.line(to: NSPoint(x: 11, y: 16))
+
+        // Right bar (medium)
+        path.move(to: NSPoint(x: 17, y: 7))
+        path.line(to: NSPoint(x: 17, y: 15))
+
+        // Set color
+        if let color = color {
+            color.setStroke()
+        } else {
+            NSColor.white.setStroke()
+        }
+
+        path.stroke()
+        image.unlockFocus()
+
+        return image
+    }
+
     private func setupMenuBar() {
         // Create status item with variable length (auto-sizing)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -306,10 +392,10 @@ class MenuBarController: NSObject, NSApplicationDelegate {
 
         // Configure the status item button
         if let button = statusItem.button {
-            // Use SF Symbol for microphone (placeholder icon)
-            // In future stories, this will change based on recording state
-            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "speech-to-clip")
-            button.image?.isTemplate = true // Allows menu bar to adjust color for dark/light mode
+            // Initial icon: custom waveform in template mode (white/system color)
+            // This will be updated by setupRecordingStateObserver based on recording state
+            button.image = createWaveformIcon(color: nil)
+            button.image?.isTemplate = true
         }
 
         // Create and configure the menu
@@ -490,5 +576,26 @@ extension MenuBarController: NSWindowDelegate {
             appState?.showOnboarding = false
         }
         return true
+    }
+}
+
+// MARK: - NSImage Extension for Tinting
+
+extension NSImage {
+    /// Create a tinted copy of the image with specified color
+    /// Used for menubar icon color customization (lime green in recording state)
+    func tinted(with color: NSColor) -> NSImage? {
+        let size = self.size
+        return NSImage(size: size, flipped: false) { bounds in
+            // Fill with tint color
+            color.setFill()
+            bounds.fill()
+
+            // Draw original image with multiply blend mode to apply tint
+            let imageRect = NSRect(origin: .zero, size: size)
+            self.draw(in: imageRect, from: imageRect, operation: .destinationIn, fraction: 1.0)
+
+            return true
+        }
     }
 }

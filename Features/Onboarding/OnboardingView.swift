@@ -387,6 +387,13 @@ struct LanguageStepView: View {
                 Spacer()
 
                 Button("Continue") {
+                    // Save selected language to settings before moving forward
+                    do {
+                        try appState.saveSettings()
+                        print("✅ Language setting saved: \(appState.settings.defaultLanguage.rawValue)")
+                    } catch {
+                        print("⚠️ Failed to save language setting: \(error.localizedDescription)")
+                    }
                     coordinator.moveToNextStep()
                 }
                 .buttonStyle(.borderedProminent)
