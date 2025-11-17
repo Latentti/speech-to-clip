@@ -12,6 +12,7 @@ A macOS menu bar application that transcribes speech to text using OpenAI's Whis
 - 🌊 **Wave Visualizer** - Floating wave animation on screen edge that responds to your voice amplitude
 - 🤖 **AI Transcription** - Powered by OpenAI Whisper API for accurate speech-to-text
 - 📋 **Smart Auto-Paste** - Intelligently pastes text with seamless clipboard fallback
+- 💚 **Custom Menubar Icon** - Elegant S-curve waveform that turns lime green when recording
 - ⚙️ **Customizable Settings** - Configure language, hotkey, and multiple profiles
 - 🔐 **Secure Storage** - API keys stored safely in macOS Keychain
 - 🚀 **Onboarding** - Guided setup for first-time users with permission checks

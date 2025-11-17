@@ -343,7 +343,7 @@ class MenuBarController: NSObject, NSApplicationDelegate {
     }
 
     /// Create custom waveform icon for menubar
-    /// Simple minimalist design matching the visualizer aesthetic
+    /// Elegant curved wave design from speech-toolbar.svg, scaled to menubar size
     private func createWaveformIcon(color: NSColor?) -> NSImage {
         let size = NSSize(width: 22, height: 22)
         let image = NSImage(size: size)
@@ -351,22 +351,30 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         image.lockFocus()
 
         let path = NSBezierPath()
-        path.lineWidth = 2.0
+        path.lineWidth = 2.5
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
 
-        // Draw simple waveform (3 vertical bars of varying heights)
-        // Left bar (short)
-        path.move(to: NSPoint(x: 5, y: 9))
-        path.line(to: NSPoint(x: 5, y: 13))
+        // Vertical S-curve wave (simplified from speech-toolbar.svg)
+        // Centered in 22x22 space with proper vertical orientation
 
-        // Middle bar (tall - active)
-        path.move(to: NSPoint(x: 11, y: 6))
-        path.line(to: NSPoint(x: 11, y: 16))
+        // Start from top
+        path.move(to: NSPoint(x: 11, y: 20))
 
-        // Right bar (medium)
-        path.move(to: NSPoint(x: 17, y: 7))
-        path.line(to: NSPoint(x: 17, y: 15))
+        // Upper curve (bend right)
+        path.curve(to: NSPoint(x: 15, y: 14),
+                   controlPoint1: NSPoint(x: 13, y: 18),
+                   controlPoint2: NSPoint(x: 15, y: 16))
+
+        // Middle transition (cross back)
+        path.curve(to: NSPoint(x: 7, y: 8),
+                   controlPoint1: NSPoint(x: 15, y: 12),
+                   controlPoint2: NSPoint(x: 7, y: 10))
+
+        // Lower curve (bend right again)
+        path.curve(to: NSPoint(x: 11, y: 2),
+                   controlPoint1: NSPoint(x: 7, y: 6),
+                   controlPoint2: NSPoint(x: 9, y: 4))
 
         // Set color
         if let color = color {
