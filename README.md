@@ -18,6 +18,15 @@ A macOS menu bar application that transcribes speech to text using OpenAI's Whis
 - 🚀 **Onboarding** - Guided setup for first-time users with permission checks
 - 💬 **User-Friendly Errors** - Clear, actionable error messages with recovery steps
 
+## Privacy
+
+Speech-to-Clip offers two transcription modes with different privacy tradeoffs:
+
+- **🔒 Local Whisper** - Audio never leaves your Mac. Complete privacy. [Privacy Guarantees](docs/privacy-guarantees.md)
+- **☁️ OpenAI API** - Transcription processed by OpenAI (cloud service)
+
+**Your data, your choice.** We provide the tools; you decide what matters most: maximum privacy or maximum convenience.
+
 ## Requirements
 
 - **macOS**: 14.0 (Sonoma) or later
@@ -33,7 +42,7 @@ A macOS menu bar application that transcribes speech to text using OpenAI's Whis
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/speech-to-clip.git
+   git clone https://github.com/Latentti/speech-to-clip.git
    cd speech-to-clip/speech-to-clip
    ```
 
@@ -49,7 +58,7 @@ A macOS menu bar application that transcribes speech to text using OpenAI's Whis
 
 ### Option 2: Download Pre-built Binary
 
-*Coming soon - Check the [Releases](https://github.com/yourusername/speech-to-clip/releases) page*
+*Coming soon - Check the [Releases](https://github.com/Latentti/speech-to-clip/releases) page*
 
 ## Quick Start
 
@@ -263,7 +272,7 @@ Managed via Swift Package Manager:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/speech-to-clip.git
+git clone https://github.com/Latentti/speech-to-clip.git
 cd speech-to-clip/speech-to-clip
 
 # Open in Xcode
