@@ -27,6 +27,7 @@ enum ProfileError: Error, LocalizedError {
     case keychainError(KeychainError)
     case invalidProfileData
     case noActiveProfile
+    case invalidPort(Int)
 
     /// Human-readable error description
     var errorDescription: String? {
@@ -41,6 +42,8 @@ enum ProfileError: Error, LocalizedError {
             return "Profile data is corrupted or invalid"
         case .noActiveProfile:
             return "No active profile selected"
+        case .invalidPort(let port):
+            return "Invalid server port: \(port). Port must be between 1024-65535."
         }
     }
 
@@ -57,6 +60,8 @@ enum ProfileError: Error, LocalizedError {
             return "Reset profiles in Settings"
         case .noActiveProfile:
             return "Select an active profile in Settings"
+        case .invalidPort:
+            return "Choose a port number between 1024 and 65535"
         }
     }
 }
@@ -136,27 +141,49 @@ class ProfileManager {
     ///   - name: User-facing profile name
     ///   - apiKey: Whisper API key to store securely
     ///   - language: Default language code (e.g., "en")
+    ///   - transcriptionEngine: Transcription engine to use (default: .openai)
+    ///   - whisperModelName: Model name for Local Whisper (optional)
+    ///   - whisperServerPort: Server port for Local Whisper (default: 8080)
     ///
     /// - Returns: The created Profile
     ///
     /// - Throws:
     ///   - ProfileError.duplicateProfileName: If name already exists
+    ///   - ProfileError.invalidPort: If port is outside valid range for Local Whisper
     ///   - ProfileError.keychainError: If API key storage fails
     ///   - ProfileError.invalidProfileData: If profile cannot be saved
     ///
     /// - Note: Story 7.2 AC 3 - createProfile operation
+    /// - Note: Story 10.2 AC 1, 3 - Port validation for Local Whisper
     @discardableResult
-    func createProfile(name: String, apiKey: String, language: String) throws -> Profile {
+    func createProfile(
+        name: String,
+        apiKey: String,
+        language: String,
+        transcriptionEngine: TranscriptionEngine = .openai,
+        whisperModelName: String? = nil,
+        whisperServerPort: Int = 8080
+    ) throws -> Profile {
         // Check for duplicate name
         let existingProfiles = try getAllProfiles()
         if existingProfiles.contains(where: { $0.name == name }) {
             throw ProfileError.duplicateProfileName(name)
         }
 
+        // Validate Local Whisper configuration (Story 10.2 AC 1)
+        if transcriptionEngine == .localWhisper {
+            guard (1024...65535).contains(whisperServerPort) else {
+                throw ProfileError.invalidPort(whisperServerPort)
+            }
+        }
+
         // Create new profile
         let profile = Profile(
             name: name,
-            language: language
+            language: language,
+            transcriptionEngine: transcriptionEngine,
+            whisperModelName: whisperModelName,
+            whisperServerPort: whisperServerPort
         )
 
         // Store API key in Keychain first
@@ -197,19 +224,27 @@ class ProfileManager {
     ///   - name: New name (optional)
     ///   - apiKey: New API key (optional)
     ///   - language: New language (optional)
+    ///   - transcriptionEngine: New transcription engine (optional)
+    ///   - whisperModelName: New model name for Local Whisper (optional)
+    ///   - whisperServerPort: New server port for Local Whisper (optional)
     ///
     /// - Throws:
     ///   - ProfileError.profileNotFound: If profile doesn't exist
     ///   - ProfileError.duplicateProfileName: If new name conflicts
+    ///   - ProfileError.invalidPort: If port is outside valid range for Local Whisper
     ///   - ProfileError.keychainError: If API key update fails
     ///   - ProfileError.invalidProfileData: If save fails
     ///
     /// - Note: Story 7.2 AC 3 - updateProfile operation
+    /// - Note: Story 10.2 AC 1, 3 - Port validation for Local Whisper
     func updateProfile(
         id: UUID,
         name: String? = nil,
         apiKey: String? = nil,
-        language: String? = nil
+        language: String? = nil,
+        transcriptionEngine: TranscriptionEngine? = nil,
+        whisperModelName: String?? = nil,
+        whisperServerPort: Int? = nil
     ) throws {
         var profiles = try getAllProfiles()
 
@@ -221,6 +256,17 @@ class ProfileManager {
         if let newName = name, newName != profiles[index].name {
             if profiles.contains(where: { $0.name == newName && $0.id != id }) {
                 throw ProfileError.duplicateProfileName(newName)
+            }
+        }
+
+        // Validate Local Whisper configuration (Story 10.2 AC 1)
+        var profile = profiles[index]
+        let finalEngine = transcriptionEngine ?? profile.transcriptionEngine
+        let finalPort = whisperServerPort ?? profile.whisperServerPort
+
+        if finalEngine == .localWhisper {
+            guard (1024...65535).contains(finalPort) else {
+                throw ProfileError.invalidPort(finalPort)
             }
         }
 
@@ -236,9 +282,11 @@ class ProfileManager {
         }
 
         // Update profile metadata
-        var profile = profiles[index]
         if let newName = name { profile.name = newName }
         if let newLanguage = language { profile.language = newLanguage }
+        if let newEngine = transcriptionEngine { profile.transcriptionEngine = newEngine }
+        if let newModelName = whisperModelName { profile.whisperModelName = newModelName }
+        if let newPort = whisperServerPort { profile.whisperServerPort = newPort }
         profile.updatedAt = Date()
 
         profiles[index] = profile

@@ -88,6 +88,22 @@ class AppState: ObservableObject {
     /// Provides "Try it now!" guidance with hotkey instructions
     @Published var showTutorialPrompt: Bool = false
 
+    /// Audio data stored for retry capability
+    /// Story 12.3: Retained after WhisperCppError for retry without re-recording
+    /// Cleared on successful transcription or profile switch
+    @Published var retryAudioData: Data? = nil
+
+    /// Number of retry attempts for current transcription
+    /// Story 12.3: Tracks failed retry attempts (max 3)
+    /// Reset to 0 on successful transcription
+    /// Internal access for MenuBarController to display attempt count
+    var retryCount: Int = 0
+
+    /// Maximum number of retry attempts allowed
+    /// Story 12.3: 3-retry limit prevents infinite loops
+    /// Internal access for MenuBarController to display attempt limit
+    let maxRetries: Int = 3
+
     // MARK: - Service Dependencies
 
     /// AudioRecorder instance for managing audio recording lifecycle
@@ -421,40 +437,88 @@ class AppState: ObservableObject {
             print("🔑 Using API key from settings (no profile configured)")
         }
 
-        // Validate API key is configured
-        guard !effectiveAPIKey.isEmpty else {
-            print("❌ API key missing")
-            recordingState = .error(SpeechToClipError.apiKeyMissing)
-            lastError = SpeechToClipError.apiKeyMissing
-            currentAmplitude = 0.0
-            return
-        }
-
+        // Story 11.5: Route transcription based on engine type
         do {
-            // Check if translation mode is enabled
             let text: String
-            if settings.enableTranslation {
-                print("🔄 Starting translation to English...")
-                // Use translation endpoint (auto-detects source language)
-                text = try await transcriptionService.translate(
+
+            // Determine which transcription engine to use based on profile configuration
+            let engineType = currentProfile?.transcriptionEngine ?? .openai
+
+            switch engineType {
+            case .openai:
+                // OpenAI transcription path (unchanged from original implementation)
+                // Validate API key is configured
+                guard !effectiveAPIKey.isEmpty else {
+                    print("❌ API key missing")
+                    recordingState = .error(SpeechToClipError.apiKeyMissing)
+                    lastError = SpeechToClipError.apiKeyMissing
+                    currentAmplitude = 0.0
+                    return
+                }
+
+                // Check if translation mode is enabled
+                if settings.enableTranslation {
+                    print("🔄 Starting translation to English (OpenAI)...")
+                    // Use translation endpoint (auto-detects source language)
+                    text = try await transcriptionService.translate(
+                        audioData: audioData,
+                        apiKey: effectiveAPIKey
+                    )
+                } else {
+                    print("🔄 Starting transcription (OpenAI)...")
+                    // Call TranscriptionService with audio, API key, and language
+                    // Use language from active profile, fallback to settings.defaultLanguage if no profile
+                    let language = currentProfile?.language ?? settings.defaultLanguage.rawValue
+                    text = try await transcriptionService.transcribe(
+                        audioData: audioData,
+                        apiKey: effectiveAPIKey,
+                        language: language
+                    )
+                }
+
+            case .localWhisper:
+                // Local Whisper transcription path (NEW in Story 11.5)
+                print("🔄 Starting transcription (Local Whisper)...")
+
+                guard let profile = currentProfile else {
+                    print("❌ No profile configured for Local Whisper")
+                    recordingState = .error(SpeechToClipError.apiKeyMissing)
+                    lastError = SpeechToClipError.apiKeyMissing
+                    currentAmplitude = 0.0
+                    return
+                }
+
+                // Create WhisperCppClient instance
+                let whisperClient = WhisperCppClient()
+
+                // Health check: verify server is running before attempting transcription
+                let isAvailable = try await whisperClient.checkServerAvailability(port: profile.whisperServerPort)
+                guard isAvailable else {
+                    print("❌ Local Whisper server not running on port \(profile.whisperServerPort)")
+                    throw WhisperCppError.serverNotRunning
+                }
+                print("✅ Local Whisper server available on port \(profile.whisperServerPort)")
+
+                // Transcribe with whisper.cpp
+                // Use model name from profile, default to "base" if not specified
+                let modelName = profile.whisperModelName ?? "base"
+                let language = profile.language
+
+                print("🔄 Transcribing with model: \(modelName), language: \(language)")
+                text = try await whisperClient.transcribe(
                     audioData: audioData,
-                    apiKey: effectiveAPIKey
-                )
-            } else {
-                print("🔄 Starting transcription...")
-                // Call TranscriptionService with audio, API key, and language
-                // Story 7.4: Use effectiveAPIKey (from profile or settings)
-                // Use language from active profile, fallback to settings.defaultLanguage if no profile
-                let language = currentProfile?.language ?? settings.defaultLanguage.rawValue
-                text = try await transcriptionService.transcribe(
-                    audioData: audioData,
-                    apiKey: effectiveAPIKey,
+                    model: modelName,
+                    port: profile.whisperServerPort,
                     language: language
                 )
             }
 
             // Success: update transcribed text
             lastTranscribedText = text
+
+            // Story 12.3: Clear retry state on successful transcription
+            retryAudioData = nil
+            retryCount = 0
 
             // Story 5.1: Copy to clipboard (non-blocking fallback)
             // Clipboard errors are logged but don't fail transcription
@@ -524,6 +588,24 @@ class AppState: ObservableObject {
         } catch {
             // Error: update error state and transition to error
             print("❌ Transcription failed: \(error.localizedDescription)")
+
+            // Enhanced logging for WhisperCppError (Story 12.1)
+            if let whisperError = error as? WhisperCppError {
+                print("   Error type: WhisperCppError")
+                if let recovery = whisperError.recoverySuggestion {
+                    print("   Recovery suggestion:")
+                    print(recovery)
+                }
+
+                // Story 12.3: Store audio data for retry on WhisperCppError only
+                // Only store if this is not already a retry (avoid overwriting)
+                if retryAudioData == nil {
+                    retryAudioData = audioData
+                    retryCount = 0
+                    print("💾 Stored audio data for retry (\(audioData.count) bytes)")
+                }
+            }
+
             lastError = error
             recordingState = .error(error)
             currentAmplitude = 0.0
@@ -538,6 +620,48 @@ class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Retry transcription with stored audio data
+    ///
+    /// Story 12.3: Allows user to retry transcription after fixing Local Whisper error
+    /// Uses current profile settings (not original) in case user switched profiles
+    /// Increments retry count and enforces 3-retry limit
+    ///
+    /// Thread safety: @MainActor ensures this runs on main thread for state updates
+    @MainActor
+    func retryTranscription() async {
+        // Guard: Check if audio data exists for retry
+        guard let audioData = retryAudioData else {
+            print("⚠️ No audio data available for retry")
+            return
+        }
+
+        // Guard: Check retry count limit
+        guard retryCount < maxRetries else {
+            print("⚠️ Retry limit reached (\(maxRetries) attempts)")
+            return
+        }
+
+        // Increment retry count
+        retryCount += 1
+        print("🔄 Retry attempt \(retryCount) of \(maxRetries)...")
+
+        // Update state to processing
+        recordingState = .processing
+
+        // Retry transcription with stored audio
+        // Note: Uses current profile settings, not original
+        lastRecordedAudio = audioData
+        await transcribeAudio()
+    }
+
+    /// Check if retry is available
+    ///
+    /// Story 12.3: Used by MenuBarController to determine if Retry button should be shown
+    /// Returns true if audio data exists and retry limit not reached
+    var canRetry: Bool {
+        retryAudioData != nil && retryCount < maxRetries
     }
 
     // MARK: - Tutorial Management (Story 8.4)

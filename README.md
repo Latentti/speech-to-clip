@@ -68,6 +68,18 @@ A macOS menu bar application that transcribes speech to text using OpenAI's Whis
    - Wait for transcription (wave continues during processing)
    - Text appears automatically in your active field!
 
+### Local Whisper Setup (Optional)
+
+For privacy-first, offline transcription without sending audio to external servers:
+
+📚 **[Local Whisper Setup Guide](docs/local-whisper-setup.md)** - Complete walkthrough for installing whisper.cpp and configuring local transcription
+
+**Benefits:**
+- 🔒 Audio never leaves your Mac
+- ✅ Works completely offline
+- 💰 Free (no API costs)
+- ⚡ Fast on Apple Silicon
+
 ### Configuration
 
 Click the menu bar icon → **Settings** to configure:

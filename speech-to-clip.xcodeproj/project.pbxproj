@@ -28,7 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		EDAED0DF2EC4E97F007BDB87 /* speech-to-clip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "speech-to-clip.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		EDAED0DF2EC4E97F007BDB87 /* speech-to-clip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "speech-to-clip.app"; path = "Speech to Clip.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EDAED0EC2EC4E980007BDB87 /* speech-to-clipTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "speech-to-clipTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EDAED0F62EC4E980007BDB87 /* speech-to-clipUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "speech-to-clipUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */

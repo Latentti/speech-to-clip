@@ -41,6 +41,9 @@ class MenuBarController: NSObject, NSApplicationDelegate {
     // Recording state observer for menubar icon updates
     private var recordingStateCancellable: AnyCancellable?
 
+    // Story 12.1: Error alert presentation
+    private var errorAlertCancellable: AnyCancellable?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupHotkey()
@@ -49,6 +52,7 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         setupTutorialWindowObserver()
         setupProfileObservers()
         setupRecordingStateObserver()
+        setupErrorAlertObserver()
     }
 
     /// Set up NotificationCenter observers for profile changes
@@ -569,6 +573,102 @@ class MenuBarController: NSObject, NSApplicationDelegate {
                 print("   Suggestion: \(profileError.recoverySuggestion ?? "No suggestion")")
             }
         }
+    }
+
+    // MARK: - Error Alert Presentation (Story 12.1)
+
+    /// Set up observer for AppState.lastError to present error alerts
+    ///
+    /// When lastError is set, presents an NSAlert with:
+    /// - Error title and description from LocalizedError
+    /// - Recovery suggestion if available
+    /// - "OK" button to dismiss
+    /// - "Help" button (for WhisperCppError) that opens documentation in browser
+    private func setupErrorAlertObserver() {
+        guard let appState = appState else { return }
+
+        errorAlertCancellable = appState.$lastError
+            .sink { [weak self] error in
+                guard let self = self, let error = error else { return }
+
+                // Show error alert on main thread
+                DispatchQueue.main.async {
+                    self.showErrorAlert(for: error)
+                }
+            }
+    }
+
+    /// Present error alert with appropriate buttons and messaging
+    ///
+    /// For WhisperCppError: Shows OK and Help buttons (Help opens documentation)
+    /// For other errors: Shows OK button only
+    private func showErrorAlert(for error: Error) {
+        let alert = NSAlert()
+
+        // Set error title and message
+        if let localizedError = error as? LocalizedError {
+            alert.messageText = localizedError.errorDescription ?? "An error occurred"
+
+            // Combine error description with recovery suggestion for informativeText
+            var message = ""
+            if let recovery = localizedError.recoverySuggestion {
+                message = recovery
+            }
+            alert.informativeText = message
+        } else {
+            alert.messageText = "An error occurred"
+            alert.informativeText = error.localizedDescription
+        }
+
+        alert.alertStyle = .warning
+
+        // Add OK button (primary)
+        alert.addButton(withTitle: "OK")
+
+        // Add Help and Retry buttons for WhisperCppError
+        if let whisperError = error as? WhisperCppError,
+           let helpURL = whisperError.helpURL {
+            alert.addButton(withTitle: "Help")
+
+            // Story 12.3: Add Retry button if retry is available
+            if let appState = appState, appState.canRetry {
+                alert.addButton(withTitle: "Retry")
+
+                // Add retry count to informative text if retries have been attempted
+                if appState.retryCount > 0 {
+                    let attemptInfo = "\n\nAttempt \(appState.retryCount + 1) of \(appState.maxRetries)"
+                    alert.informativeText += attemptInfo
+                }
+            }
+
+            // Handle button responses
+            let response = alert.runModal()
+
+            if response == .alertSecondButtonReturn {
+                // Help button clicked - open documentation URL
+                NSWorkspace.shared.open(helpURL)
+                print("ℹ️ Opened help URL: \(helpURL.absoluteString)")
+            } else if response == .alertThirdButtonReturn {
+                // Story 12.3: Retry button clicked - attempt transcription again
+                print("🔄 Retry button clicked - retrying transcription...")
+                Task { @MainActor in
+                    await appState?.retryTranscription()
+                }
+                // Return early - don't clear error yet (will be cleared on retry success/failure)
+                return
+            }
+            // OK button (first button) automatically dismisses
+        } else {
+            // No Help button - just show OK
+            alert.runModal()
+        }
+
+        print("✅ Error alert presented for: \(error.localizedDescription)")
+
+        // Story 12.3: Clear error and retry state after presenting alert (when OK clicked)
+        appState?.lastError = nil
+        appState?.retryAudioData = nil
+        appState?.retryCount = 0
     }
 }
 

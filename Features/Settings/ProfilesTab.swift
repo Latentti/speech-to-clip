@@ -186,6 +186,12 @@ struct ProfilesTab: View {
 
             Spacer()
 
+            // Engine indicator
+            Image(systemName: profile.transcriptionEngine == .openai ? "cloud" : "desktopcomputer")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .help(profile.transcriptionEngine.rawValue)
+
             // Action buttons
             Button("Edit") {
                 print("🔍 Edit button clicked for profile: \(profile.name), id: \(profile.id)")
@@ -224,6 +230,15 @@ struct ProfilesTab: View {
         do {
             try profileManager.setActiveProfile(id: profile.id)
             activeProfile = profile
+
+            // Update AppState.currentProfile so transcription uses the correct profile
+            appState.currentProfile = profile
+
+            // Story 12.3: Clear retry state on profile switch
+            // Prevents retrying with wrong profile's audio data
+            appState.retryAudioData = nil
+            appState.retryCount = 0
+
             print("✅ Set active profile: \(profile.name)")
         } catch {
             print("❌ Failed to set active profile: \(error.localizedDescription)")
@@ -275,11 +290,14 @@ private struct AddProfileSheet: View {
     @State private var profileName = ""
     @State private var apiKey = ""
     @State private var selectedLanguage = "en"
+    @State private var transcriptionEngine: TranscriptionEngine = .openai
+    @State private var whisperModelName = ""
+    @State private var whisperServerPort = 8080
 
     @FocusState private var focusedField: Field?
 
     private enum Field {
-        case name, apiKey
+        case name, apiKey, modelName, serverPort
     }
 
     // MARK: - Body
@@ -307,9 +325,6 @@ private struct AddProfileSheet: View {
                     TextField("Profile Name", text: $profileName)
                         .focused($focusedField, equals: .name)
 
-                    SecureField("API Key", text: $apiKey)
-                        .focused($focusedField, equals: .apiKey)
-
                     Picker("Language:", selection: $selectedLanguage) {
                         ForEach(WhisperLanguage.sortedByDisplayName) { language in
                             Text(language.displayName)
@@ -317,10 +332,47 @@ private struct AddProfileSheet: View {
                         }
                     }
                     .pickerStyle(.menu)
-                } footer: {
-                    Text("Your API key is securely stored in the system Keychain")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+
+                    Picker("Transcription Engine:", selection: $transcriptionEngine) {
+                        ForEach(TranscriptionEngine.allCases, id: \.self) { engine in
+                            Label(engine.rawValue, systemImage: engine == .openai ? "cloud" : "desktopcomputer")
+                                .tag(engine)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                // OpenAI Configuration
+                if transcriptionEngine == .openai {
+                    Section {
+                        SecureField("API Key", text: $apiKey)
+                            .focused($focusedField, equals: .apiKey)
+                    } header: {
+                        Text("OpenAI Configuration")
+                    } footer: {
+                        Text("Your API key is securely stored in the system Keychain")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                // Local Whisper Configuration
+                if transcriptionEngine == .localWhisper {
+                    Section {
+                        TextField("Model Name (optional)", text: $whisperModelName)
+                            .focused($focusedField, equals: .modelName)
+                            .help("e.g., base, medium, large")
+
+                        TextField("Server Port", value: $whisperServerPort, format: .number)
+                            .focused($focusedField, equals: .serverPort)
+                            .help("Default: 8080")
+
+                        Text("For less common languages, Medium or Large models recommended")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } header: {
+                        Text("Local Whisper Configuration")
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -355,28 +407,53 @@ private struct AddProfileSheet: View {
     // MARK: - Validation
 
     private var isValid: Bool {
-        !profileName.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
+        let nameValid = !profileName.trimmingCharacters(in: .whitespaces).isEmpty
+
+        // API Key required only for OpenAI
+        if transcriptionEngine == .openai {
+            return nameValid && !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
+        } else {
+            // For Local Whisper, only name is required
+            return nameValid
+        }
     }
 
     // MARK: - Actions
 
     private func addProfile() {
         let trimmedName = profileName.trimmingCharacters(in: .whitespaces)
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespaces)
 
-        guard !trimmedName.isEmpty, !trimmedKey.isEmpty else {
-            onError("Profile name and API key cannot be empty")
+        guard !trimmedName.isEmpty else {
+            onError("Profile name cannot be empty")
             return
         }
+
+        // Validate API key for OpenAI
+        let trimmedKey: String
+        if transcriptionEngine == .openai {
+            trimmedKey = apiKey.trimmingCharacters(in: .whitespaces)
+            guard !trimmedKey.isEmpty else {
+                onError("API key cannot be empty for OpenAI transcription")
+                return
+            }
+        } else {
+            // For Local Whisper, use a placeholder API key
+            trimmedKey = "local-whisper-placeholder"
+        }
+
+        // Convert empty model name to nil
+        let modelName = whisperModelName.trimmingCharacters(in: .whitespaces).isEmpty ? nil : whisperModelName.trimmingCharacters(in: .whitespaces)
 
         do {
             _ = try profileManager.createProfile(
                 name: trimmedName,
                 apiKey: trimmedKey,
-                language: selectedLanguage
+                language: selectedLanguage,
+                transcriptionEngine: transcriptionEngine,
+                whisperModelName: modelName,
+                whisperServerPort: whisperServerPort
             )
-            print("✅ Created profile: \(trimmedName)")
+            print("✅ Created profile: \(trimmedName) with engine: \(transcriptionEngine.rawValue)")
             dismiss()
             onProfileCreated()
         } catch {
@@ -413,11 +490,14 @@ private struct EditProfileSheet: View {
     @State private var apiKey = ""
     @State private var selectedLanguage: String
     @State private var updateApiKey = false
+    @State private var transcriptionEngine: TranscriptionEngine
+    @State private var whisperModelName: String
+    @State private var whisperServerPort: Int
 
     @FocusState private var focusedField: Field?
 
     private enum Field {
-        case name, apiKey
+        case name, apiKey, modelName, serverPort
     }
 
     // MARK: - Initialization
@@ -431,6 +511,9 @@ private struct EditProfileSheet: View {
         // Initialize state with profile values
         _profileName = State(initialValue: profile.name)
         _selectedLanguage = State(initialValue: profile.language)
+        _transcriptionEngine = State(initialValue: profile.transcriptionEngine)
+        _whisperModelName = State(initialValue: profile.whisperModelName ?? "")
+        _whisperServerPort = State(initialValue: profile.whisperServerPort)
     }
 
     // MARK: - Body
@@ -458,13 +541,6 @@ private struct EditProfileSheet: View {
                     TextField("Profile Name", text: $profileName)
                         .focused($focusedField, equals: .name)
 
-                    Toggle("Update API Key", isOn: $updateApiKey)
-
-                    if updateApiKey {
-                        SecureField("New API Key", text: $apiKey)
-                            .focused($focusedField, equals: .apiKey)
-                    }
-
                     Picker("Language:", selection: $selectedLanguage) {
                         ForEach(WhisperLanguage.sortedByDisplayName) { language in
                             Text(language.displayName)
@@ -472,10 +548,51 @@ private struct EditProfileSheet: View {
                         }
                     }
                     .pickerStyle(.menu)
-                } footer: {
-                    Text("Leave 'Update API Key' off to keep the existing API key unchanged")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+
+                    Picker("Transcription Engine:", selection: $transcriptionEngine) {
+                        ForEach(TranscriptionEngine.allCases, id: \.self) { engine in
+                            Label(engine.rawValue, systemImage: engine == .openai ? "cloud" : "desktopcomputer")
+                                .tag(engine)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                // OpenAI Configuration
+                if transcriptionEngine == .openai {
+                    Section {
+                        Toggle("Update API Key", isOn: $updateApiKey)
+
+                        if updateApiKey {
+                            SecureField("New API Key", text: $apiKey)
+                                .focused($focusedField, equals: .apiKey)
+                        }
+                    } header: {
+                        Text("OpenAI Configuration")
+                    } footer: {
+                        Text("Leave 'Update API Key' off to keep the existing API key unchanged")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                // Local Whisper Configuration
+                if transcriptionEngine == .localWhisper {
+                    Section {
+                        TextField("Model Name (optional)", text: $whisperModelName)
+                            .focused($focusedField, equals: .modelName)
+                            .help("e.g., base, medium, large")
+
+                        TextField("Server Port", value: $whisperServerPort, format: .number)
+                            .focused($focusedField, equals: .serverPort)
+                            .help("Default: 8080")
+
+                        Text("For less common languages, Medium or Large models recommended")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } header: {
+                        Text("Local Whisper Configuration")
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -513,8 +630,15 @@ private struct EditProfileSheet: View {
 
     private var isValid: Bool {
         let nameValid = !profileName.trimmingCharacters(in: .whitespaces).isEmpty
-        let keyValid = !updateApiKey || !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
-        return nameValid && keyValid
+
+        // For OpenAI: validate API key if updating
+        if transcriptionEngine == .openai {
+            let keyValid = !updateApiKey || !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
+            return nameValid && keyValid
+        } else {
+            // For Local Whisper, only name is required
+            return nameValid
+        }
     }
 
     // MARK: - Actions
@@ -527,22 +651,29 @@ private struct EditProfileSheet: View {
             return
         }
 
-        if updateApiKey {
+        // Validate API key if updating for OpenAI
+        if transcriptionEngine == .openai && updateApiKey {
             let trimmedKey = apiKey.trimmingCharacters(in: .whitespaces)
             guard !trimmedKey.isEmpty else {
-                onError("API key cannot be empty")
+                onError("API key cannot be empty for OpenAI transcription")
                 return
             }
         }
+
+        // Convert empty model name to nil
+        let modelName = whisperModelName.trimmingCharacters(in: .whitespaces).isEmpty ? nil : whisperModelName.trimmingCharacters(in: .whitespaces)
 
         do {
             try profileManager.updateProfile(
                 id: profile.id,
                 name: trimmedName,
                 apiKey: updateApiKey ? apiKey.trimmingCharacters(in: .whitespaces) : nil,
-                language: selectedLanguage
+                language: selectedLanguage,
+                transcriptionEngine: transcriptionEngine,
+                whisperModelName: modelName,
+                whisperServerPort: whisperServerPort
             )
-            print("✅ Updated profile: \(trimmedName)")
+            print("✅ Updated profile: \(trimmedName) with engine: \(transcriptionEngine.rawValue)")
             dismiss()
             onProfileUpdated()
         } catch {

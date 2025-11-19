@@ -364,4 +364,240 @@ final class ProfileManagerTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Port Validation Tests (Story 10.2)
+
+    /// Test that createProfile() accepts valid port for Local Whisper (AC: 1)
+    func testCreateProfile_LocalWhisperValidPort_Succeeds() throws {
+        // Arrange
+        let name = "Local Whisper Profile"
+        let apiKey = "not-needed-for-local"
+        let validPort = 8080
+
+        // Act
+        let profile = try profileManager.createProfile(
+            name: name,
+            apiKey: apiKey,
+            language: "en",
+            transcriptionEngine: .localWhisper,
+            whisperModelName: "base",
+            whisperServerPort: validPort
+        )
+
+        // Assert
+        XCTAssertEqual(profile.transcriptionEngine, .localWhisper, "Should have Local Whisper engine")
+        XCTAssertEqual(profile.whisperServerPort, validPort, "Should have correct port")
+        XCTAssertEqual(profile.whisperModelName, "base", "Should have correct model name")
+
+        // Cleanup
+        try keychainService.delete(for: profile.id)
+    }
+
+    /// Test that createProfile() throws error for invalid port (below range) for Local Whisper (AC: 1, 3)
+    func testCreateProfile_LocalWhisperInvalidPortBelowRange_ThrowsError() throws {
+        // Arrange
+        let name = "Invalid Port Profile"
+        let invalidPort = 999
+
+        // Act & Assert
+        XCTAssertThrowsError(
+            try profileManager.createProfile(
+                name: name,
+                apiKey: "test-key",
+                language: "en",
+                transcriptionEngine: .localWhisper,
+                whisperServerPort: invalidPort
+            ),
+            "createProfile() should throw error for port below valid range"
+        ) { error in
+            guard let profileError = error as? ProfileError else {
+                XCTFail("Error should be ProfileError type")
+                return
+            }
+
+            if case ProfileError.invalidPort(let port) = profileError {
+                XCTAssertEqual(port, invalidPort, "Error should contain invalid port")
+                XCTAssertTrue(
+                    profileError.localizedDescription.contains("1024-65535"),
+                    "Error message should contain valid port range"
+                )
+            } else {
+                XCTFail("Error should be ProfileError.invalidPort")
+            }
+        }
+    }
+
+    /// Test that createProfile() throws error for invalid port (above range) for Local Whisper (AC: 1, 3)
+    func testCreateProfile_LocalWhisperInvalidPortAboveRange_ThrowsError() throws {
+        // Arrange
+        let name = "Invalid Port Profile"
+        let invalidPort = 70000
+
+        // Act & Assert
+        XCTAssertThrowsError(
+            try profileManager.createProfile(
+                name: name,
+                apiKey: "test-key",
+                language: "en",
+                transcriptionEngine: .localWhisper,
+                whisperServerPort: invalidPort
+            ),
+            "createProfile() should throw error for port above valid range"
+        ) { error in
+            guard let profileError = error as? ProfileError else {
+                XCTFail("Error should be ProfileError type")
+                return
+            }
+
+            if case ProfileError.invalidPort(let port) = profileError {
+                XCTAssertEqual(port, invalidPort, "Error should contain invalid port")
+            } else {
+                XCTFail("Error should be ProfileError.invalidPort")
+            }
+        }
+    }
+
+    /// Test that createProfile() does NOT validate port for OpenAI profiles (AC: 1)
+    func testCreateProfile_OpenAIProfileWithAnyPort_Succeeds() throws {
+        // Arrange: Create OpenAI profile with invalid port (should be ignored)
+        let name = "OpenAI Profile"
+        let apiKey = "sk-openai-key"
+        let invalidPort = 999
+
+        // Act: Port validation should NOT apply to OpenAI profiles
+        let profile = try profileManager.createProfile(
+            name: name,
+            apiKey: apiKey,
+            language: "en",
+            transcriptionEngine: .openai,
+            whisperServerPort: invalidPort  // Invalid but should not be validated for OpenAI
+        )
+
+        // Assert: Profile created successfully despite invalid port
+        XCTAssertEqual(profile.transcriptionEngine, .openai, "Should have OpenAI engine")
+        XCTAssertEqual(profile.whisperServerPort, invalidPort, "Port should be stored as-is for OpenAI")
+
+        // Cleanup
+        try keychainService.delete(for: profile.id)
+    }
+
+    /// Test that createProfile() accepts nil whisperModelName (AC: 2)
+    func testCreateProfile_LocalWhisperNilModelName_Succeeds() throws {
+        // Arrange
+        let name = "Local Whisper No Model"
+        let apiKey = "not-needed"
+
+        // Act
+        let profile = try profileManager.createProfile(
+            name: name,
+            apiKey: apiKey,
+            language: "en",
+            transcriptionEngine: .localWhisper,
+            whisperModelName: nil,  // Should be accepted
+            whisperServerPort: 8080
+        )
+
+        // Assert
+        XCTAssertNil(profile.whisperModelName, "Model name should be nil")
+
+        // Cleanup
+        try keychainService.delete(for: profile.id)
+    }
+
+    /// Test that updateProfile() validates port when switching to Local Whisper (AC: 1, 4)
+    func testUpdateProfile_SwitchToLocalWhisperInvalidPort_ThrowsError() throws {
+        // Arrange: Create OpenAI profile with invalid port (allowed initially)
+        let profile = try profileManager.createProfile(
+            name: "OpenAI Profile",
+            apiKey: "sk-key",
+            language: "en",
+            transcriptionEngine: .openai,
+            whisperServerPort: 999  // Invalid but OK for OpenAI
+        )
+
+        // Act & Assert: Switching to Local Whisper should trigger validation
+        XCTAssertThrowsError(
+            try profileManager.updateProfile(
+                id: profile.id,
+                transcriptionEngine: .localWhisper  // Switch triggers validation
+            ),
+            "updateProfile() should validate port when switching to Local Whisper"
+        ) { error in
+            guard let profileError = error as? ProfileError else {
+                XCTFail("Error should be ProfileError type")
+                return
+            }
+
+            if case ProfileError.invalidPort(let port) = profileError {
+                XCTAssertEqual(port, 999, "Error should contain invalid port")
+            } else {
+                XCTFail("Error should be ProfileError.invalidPort")
+            }
+        }
+
+        // Cleanup
+        try keychainService.delete(for: profile.id)
+    }
+
+    /// Test that updateProfile() validates new port for Local Whisper profile (AC: 1, 4)
+    func testUpdateProfile_LocalWhisperProfileInvalidNewPort_ThrowsError() throws {
+        // Arrange: Create valid Local Whisper profile
+        let profile = try profileManager.createProfile(
+            name: "Local Whisper",
+            apiKey: "test-key",
+            language: "en",
+            transcriptionEngine: .localWhisper,
+            whisperServerPort: 8080  // Valid initially
+        )
+
+        // Act & Assert: Updating to invalid port should fail
+        XCTAssertThrowsError(
+            try profileManager.updateProfile(
+                id: profile.id,
+                whisperServerPort: 500  // Invalid port
+            ),
+            "updateProfile() should validate new port for Local Whisper"
+        ) { error in
+            guard let profileError = error as? ProfileError else {
+                XCTFail("Error should be ProfileError type")
+                return
+            }
+
+            if case ProfileError.invalidPort(let port) = profileError {
+                XCTAssertEqual(port, 500, "Error should contain invalid port")
+            } else {
+                XCTFail("Error should be ProfileError.invalidPort")
+            }
+        }
+
+        // Cleanup
+        try keychainService.delete(for: profile.id)
+    }
+
+    /// Test that updateProfile() accepts valid port update for Local Whisper (AC: 1, 4)
+    func testUpdateProfile_LocalWhisperProfileValidNewPort_Succeeds() throws {
+        // Arrange: Create Local Whisper profile
+        let profile = try profileManager.createProfile(
+            name: "Local Whisper",
+            apiKey: "test-key",
+            language: "en",
+            transcriptionEngine: .localWhisper,
+            whisperServerPort: 8080
+        )
+
+        // Act: Update to different valid port
+        let newPort = 9000
+        try profileManager.updateProfile(
+            id: profile.id,
+            whisperServerPort: newPort
+        )
+
+        // Assert: Port should be updated
+        let allProfiles = try profileManager.getAllProfiles()
+        let updatedProfile = allProfiles.first(where: { $0.id == profile.id })
+        XCTAssertEqual(updatedProfile?.whisperServerPort, newPort, "Port should be updated")
+
+        // Cleanup
+        try keychainService.delete(for: profile.id)
+    }
 }
