@@ -246,7 +246,7 @@ actor WhisperCppClient {
     ) async throws -> String {
         // Construct localhost-only URL
         // Privacy guarantee: Only localhost or 127.0.0.1 are used
-        let url = URL(string: "http://localhost:\(port)/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:\(port)/inference")!
 
         // Create POST request with multipart/form-data
         var request = URLRequest(url: url)

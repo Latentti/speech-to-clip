@@ -215,7 +215,7 @@ final class WhisperCppClientTests: XCTestCase {
 
         // Act: Use reflection to call private method via transcription
         // (createMultipartBody is private, so we test it indirectly via transcribe)
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let jsonResponse = "{\"text\":\"test result\"}".data(using: .utf8)!
         MockURLProtocol.mockResponse = (jsonResponse, response, nil)
@@ -231,7 +231,7 @@ final class WhisperCppClientTests: XCTestCase {
     /// Test successful transcription (AC5: valid response)
     func testTranscriptionSuccess() async throws {
         // Arrange: Mock HTTP 200 with JSON response
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let jsonResponse = "{\"text\":\"test transcription result\"}".data(using: .utf8)!
         MockURLProtocol.mockResponse = (jsonResponse, response, nil)
@@ -252,7 +252,7 @@ final class WhisperCppClientTests: XCTestCase {
     /// Test transcription failure with HTTP 400 (AC6: invalid response)
     func testTranscriptionFailure_HTTP400() async throws {
         // Arrange: Mock HTTP 400 (Bad Request)
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 400, httpVersion: nil, headerFields: nil)!
         MockURLProtocol.mockResponse = (Data(), response, nil)
 
@@ -273,7 +273,7 @@ final class WhisperCppClientTests: XCTestCase {
     /// Test transcription failure with HTTP 500 (AC6: invalid response)
     func testTranscriptionFailure_HTTP500() async throws {
         // Arrange: Mock HTTP 500 (Internal Server Error)
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 500, httpVersion: nil, headerFields: nil)!
         MockURLProtocol.mockResponse = (Data(), response, nil)
 
@@ -294,7 +294,7 @@ final class WhisperCppClientTests: XCTestCase {
     /// Test transcription failure with invalid JSON (AC6: invalid response)
     func testTranscriptionFailure_InvalidJSON() async throws {
         // Arrange: Mock HTTP 200 with invalid JSON
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let invalidJSON = "not valid json".data(using: .utf8)!
         MockURLProtocol.mockResponse = (invalidJSON, response, nil)
@@ -316,7 +316,7 @@ final class WhisperCppClientTests: XCTestCase {
     /// Test transcription failure with empty response (AC6: invalid response)
     func testTranscriptionFailure_EmptyResponse() async throws {
         // Arrange: Mock HTTP 200 with empty data
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         MockURLProtocol.mockResponse = (Data(), response, nil)
 
@@ -357,7 +357,7 @@ final class WhisperCppClientTests: XCTestCase {
     /// Test localhost-only URL validation for transcription (AC9: security check)
     func testTranscriptionLocalhostOnlyURL() async throws {
         // Arrange: Mock successful response
-        let url = URL(string: "http://localhost:8080/v1/audio/transcriptions")!
+        let url = URL(string: "http://localhost:8080/inference")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let jsonResponse = "{\"text\":\"test\"}".data(using: .utf8)!
         MockURLProtocol.mockResponse = (jsonResponse, response, nil)
