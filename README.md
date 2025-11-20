@@ -1,31 +1,52 @@
 # Speech to Clip
 
-A macOS menu bar application that transcribes speech to text using OpenAI's Whisper API and automatically pastes the result into your active application.
+**Privacy-first speech-to-text for macOS.** Transcribe your voice with AI-powered accuracy—choose between **100% local processing** (private, offline) or **cloud API** (convenient, fast). Your data, your choice.
 
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange.svg)
 ![Platform](https://img.shields.io/badge/Platform-macOS%2014.0+-lightgrey.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 
-## Features
+## 🔥 Dual Transcription Engines
+
+Speech to Clip supports **two powerful transcription options**—pick what matters most to you:
+
+### 🔒 Local Whisper (Privacy-First)
+- ✅ **100% Private** - Audio never leaves your Mac
+- ✅ **Completely Offline** - No internet required
+- ✅ **Zero Cost** - Free after setup (no API fees)
+- ✅ **Fast on Apple Silicon** - Optimized for M1/M2/M3/M4
+- ✅ **Open Source & Auditable** - Verify privacy yourself
+
+[📚 Setup Guide](docs/local-whisper-setup.md) • [🔐 Privacy Guarantees](docs/privacy-guarantees.md)
+
+### ☁️ OpenAI API (Cloud-Based)
+- ⚡ **Maximum Accuracy** - Best-in-class transcription quality
+- 🌐 **Convenient** - Just add API key and go
+- 🚀 **Fast Setup** - No local installation needed
+- 💰 **Pay-per-use** - $0.006 per minute
+
+**Switch between engines anytime** using profiles—perfect for different scenarios.
+
+## ✨ Core Features
 
 - 🎤 **Voice Recording** - Press a hotkey (default: Control+Space) to start/stop recording
 - 🌊 **Wave Visualizer** - Floating wave animation on screen edge that responds to your voice amplitude
-- 🤖 **AI Transcription** - Powered by OpenAI Whisper API for accurate speech-to-text
 - 📋 **Smart Auto-Paste** - Intelligently pastes text with seamless clipboard fallback
 - 💚 **Custom Menubar Icon** - Elegant S-curve waveform that turns lime green when recording
-- ⚙️ **Customizable Settings** - Configure language, hotkey, and multiple profiles
+- ⚙️ **Multiple Profiles** - Create profiles for different engines, languages, and use cases
 - 🔐 **Secure Storage** - API keys stored safely in macOS Keychain
-- 🚀 **Onboarding** - Guided setup for first-time users with permission checks
-- 💬 **User-Friendly Errors** - Clear, actionable error messages with recovery steps
+- 🚀 **Guided Onboarding** - First-time setup with permission checks
+- 💬 **Helpful Errors** - Clear, actionable error messages with recovery steps
 
-## Privacy
+## Why Speech to Clip?
 
-Speech-to-Clip offers two transcription modes with different privacy tradeoffs:
+**Most speech-to-text tools force you to choose:** either sacrifice your privacy by sending audio to the cloud, or deal with complicated local setups. Speech to Clip gives you **both options** with a beautiful, simple interface.
 
-- **🔒 Local Whisper** - Audio never leaves your Mac. Complete privacy. [Privacy Guarantees](docs/privacy-guarantees.md)
-- **☁️ OpenAI API** - Transcription processed by OpenAI (cloud service)
+- **Privacy-conscious users** → Use Local Whisper for guaranteed data privacy
+- **Convenience-focused users** → Use OpenAI API for instant setup
+- **Hybrid workflows** → Switch between engines with different profiles
 
-**Your data, your choice.** We provide the tools; you decide what matters most: maximum privacy or maximum convenience.
+Built with ❤️ for people who care about their data and productivity.
 
 ## Requirements
 
