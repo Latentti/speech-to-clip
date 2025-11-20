@@ -27,13 +27,14 @@ If you're experienced with command line tools, here's the express version:
 # 1. Install whisper.cpp
 git clone https://github.com/ggerganov/whisper.cpp
 cd whisper.cpp
-make
+cmake -B build
+cmake --build build -j
 
 # 2. Download a model
 bash ./models/download-ggml-model.sh base
 
 # 3. Start the server
-./server -m models/ggml-base.bin
+./build/bin/whisper-server -m models/ggml-base.bin
 
 # 4. Configure speech-to-clip
 # Open Settings → Profiles → Add Profile
@@ -60,17 +61,18 @@ whisper.cpp is the local transcription engine that powers Local Whisper mode.
 
 2. **Build whisper.cpp:**
    ```bash
-   make
+   cmake -B build
+   cmake --build build -j
    ```
 
    This will compile whisper.cpp with optimizations for your Mac. On Apple Silicon, Metal acceleration is automatically enabled for best performance.
 
 3. **Verify installation:**
    ```bash
-   ./server --version
+   ./build/bin/whisper-server -h
    ```
 
-   You should see version information printed. If you get an error, ensure you're in the `whisper.cpp` directory.
+   You should see the help message with server options. If you get an error, ensure you're in the `whisper.cpp` directory and the build completed successfully.
 
 ### Option B: Using Homebrew (If Available)
 
@@ -145,7 +147,7 @@ The whisper.cpp server runs in the background and provides a local API endpoint 
 From the `whisper.cpp` directory:
 
 ```bash
-./server -m models/ggml-base.bin
+./build/bin/whisper-server -m models/ggml-base.bin
 ```
 
 Replace `base` with your downloaded model (`medium`, `large`, etc.).
@@ -167,13 +169,13 @@ Customize server behavior with these options:
 
 ```bash
 # Use different port
-./server -m models/ggml-base.bin --port 8081
+./build/bin/whisper-server -m models/ggml-base.bin --port 8081
 
 # Use more CPU threads (adjust based on your CPU cores)
-./server -m models/ggml-base.bin -t 4
+./build/bin/whisper-server -m models/ggml-base.bin -t 4
 
 # Enable Metal acceleration (Apple Silicon - usually auto-detected)
-./server -m models/ggml-base.bin -ng 1
+./build/bin/whisper-server -m models/ggml-base.bin -ng 1
 ```
 
 ### Keep Server Running
@@ -187,10 +189,10 @@ Customize server behavior with these options:
 **Option 2: Run in background**
 ```bash
 # Start in background
-nohup ./server -m models/ggml-base.bin > whisper-server.log 2>&1 &
+nohup ./build/bin/whisper-server -m models/ggml-base.bin > whisper-server.log 2>&1 &
 
 # Check if running
-ps aux | grep "[s]erver"
+ps aux | grep "[w]hisper-server"
 
 # Stop server (find PID first with ps command above)
 kill <PID>
@@ -202,7 +204,7 @@ Create `start-whisper.sh`:
 ```bash
 #!/bin/bash
 cd /path/to/whisper.cpp
-./server -m models/ggml-medium.bin --port 8080
+./build/bin/whisper-server -m models/ggml-medium.bin --port 8080
 ```
 
 Make executable and run:
@@ -505,13 +507,13 @@ You can switch between models by creating multiple profiles:
 
 ```bash
 # Maximum performance on Apple Silicon
-./server -m models/ggml-base.bin -ng 1 -t 4
+./build/bin/whisper-server -m models/ggml-base.bin -ng 1 -t 4
 
 # Low memory usage
-./server -m models/ggml-base.bin -t 2
+./build/bin/whisper-server -m models/ggml-base.bin -t 2
 
 # Verbose logging for debugging
-./server -m models/ggml-base.bin -v
+./build/bin/whisper-server -m models/ggml-base.bin -v
 ```
 
 ### Auto-start Server at Login
