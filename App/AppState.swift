@@ -504,12 +504,13 @@ class AppState: ObservableObject {
                 let modelName = profile.whisperModelName ?? "base"
                 let language = profile.language
 
-                print("🔄 Transcribing with model: \(modelName), language: \(language)")
+                print("🔄 Transcribing with model: \(modelName), language: \(language), translate: \(settings.enableTranslation)")
                 text = try await whisperClient.transcribe(
                     audioData: audioData,
                     model: modelName,
                     port: profile.whisperServerPort,
-                    language: language
+                    language: language,
+                    translate: settings.enableTranslation
                 )
             }
 

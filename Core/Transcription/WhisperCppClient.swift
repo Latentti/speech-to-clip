@@ -154,6 +154,7 @@ actor WhisperCppClient {
     ///   - audioData: WAV audio data to transcribe
     ///   - model: Whisper model name (e.g., "base", "medium", "large")
     ///   - language: Language code (e.g., "en", "fi")
+    ///   - translate: If true, translate output to English
     ///   - boundary: Unique boundary string (typically UUID().uuidString)
     /// - Returns: Complete multipart form-data body ready for HTTP POST
     ///
@@ -164,6 +165,7 @@ actor WhisperCppClient {
     ///     audioData: wavData,
     ///     model: "base",
     ///     language: "en",
+    ///     translate: false,
     ///     boundary: boundary
     /// )
     /// ```
@@ -171,6 +173,7 @@ actor WhisperCppClient {
         audioData: Data,
         model: String,
         language: String,
+        translate: Bool,
         boundary: String
     ) -> Data {
         var body = Data()
@@ -195,6 +198,13 @@ actor WhisperCppClient {
         body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
         body.append("\(language)\r\n")
 
+        // Translate part (when enabled, whisper.cpp translates to English)
+        if translate {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"translate\"\r\n\r\n")
+            body.append("true\r\n")
+        }
+
         // Final boundary marker with double dashes
         body.append("--\(boundary)--\r\n")
 
@@ -217,6 +227,7 @@ actor WhisperCppClient {
     ///   - model: Whisper model name (e.g., "base", "medium", "large")
     ///   - port: Port number where whisper.cpp server is running
     ///   - language: Language code (e.g., "en", "fi")
+    ///   - translate: If true, translate output to English (default: false)
     /// - Returns: Transcribed text string
     /// - Throws: `WhisperCppError.serverNotRunning` if server is not reachable
     /// - Throws: `WhisperCppError.connectionTimeout` if request times out
@@ -231,7 +242,8 @@ actor WhisperCppClient {
     ///         audioData: wavData,
     ///         model: "base",
     ///         port: 8080,
-    ///         language: "en"
+    ///         language: "en",
+    ///         translate: true
     ///     )
     ///     print("Transcription: \(text)")
     /// } catch {
@@ -242,7 +254,8 @@ actor WhisperCppClient {
         audioData: Data,
         model: String,
         port: Int,
-        language: String
+        language: String,
+        translate: Bool = false
     ) async throws -> String {
         // Construct localhost-only URL
         // Privacy guarantee: Only localhost or 127.0.0.1 are used
@@ -261,10 +274,11 @@ actor WhisperCppClient {
             audioData: audioData,
             model: model,
             language: language,
+            translate: translate,
             boundary: boundary
         )
 
-        logger.info("Starting transcription request (audio: \(audioData.count) bytes, model: \(model), language: \(language), port: \(port))")
+        logger.info("Starting transcription request (audio: \(audioData.count) bytes, model: \(model), language: \(language), translate: \(translate), port: \(port))")
 
         // Make async network call
         let (data, response): (Data, URLResponse)
