@@ -28,7 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		EDAED0DF2EC4E97F007BDB87 /* speech-to-clip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "speech-to-clip.app"; path = "Speech to Clip.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		EDAED0DF2EC4E97F007BDB87 /* Speech to Clip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Speech to Clip.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EDAED0EC2EC4E980007BDB87 /* speech-to-clipTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "speech-to-clipTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EDAED0F62EC4E980007BDB87 /* speech-to-clipUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "speech-to-clipUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -126,7 +126,7 @@
 		EDAED0E02EC4E97F007BDB87 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				EDAED0DF2EC4E97F007BDB87 /* speech-to-clip.app */,
+				EDAED0DF2EC4E97F007BDB87 /* Speech to Clip.app */,
 				EDAED0EC2EC4E980007BDB87 /* speech-to-clipTests.xctest */,
 				EDAED0F62EC4E980007BDB87 /* speech-to-clipUITests.xctest */,
 			);
@@ -162,7 +162,7 @@
 				EDAED1182EC4EFD9007BDB87 /* HotKey */,
 			);
 			productName = "speech-to-clip";
-			productReference = EDAED0DF2EC4E97F007BDB87 /* speech-to-clip.app */;
+			productReference = EDAED0DF2EC4E97F007BDB87 /* Speech to Clip.app */;
 			productType = "com.apple.product-type.application";
 		};
 		EDAED0EB2EC4E980007BDB87 /* speech-to-clipTests */ = {
@@ -449,13 +449,14 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NJ4KY3NUCX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "speech-to-clip needs accessibility access to paste transcribed text into your active application.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -465,7 +466,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.latentti.speech-to-clip";
 				PRODUCT_NAME = "Speech to Clip";
 				REGISTER_APP_GROUPS = YES;
@@ -487,13 +488,14 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NJ4KY3NUCX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "speech-to-clip needs accessibility access to paste transcribed text into your active application.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -503,7 +505,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.latentti.speech-to-clip";
 				PRODUCT_NAME = "Speech to Clip";
 				REGISTER_APP_GROUPS = YES;

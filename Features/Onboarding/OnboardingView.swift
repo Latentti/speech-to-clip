@@ -159,7 +159,7 @@ struct MicrophoneStepView: View {
             Group {
                 switch coordinator.microphonePermissionStatus {
                 case .notDetermined:
-                    Button(isRequestingPermission ? "Requesting..." : "Grant Microphone Access") {
+                    Button(isRequestingPermission ? "Requesting..." : "Continue") {
                         Task {
                             isRequestingPermission = true
                             await coordinator.requestMicrophonePermission()
@@ -211,14 +211,9 @@ struct MicrophoneStepView: View {
                 }
                 .buttonStyle(.link)
 
-                Button("Skip") {
-                    coordinator.skip()
-                }
-                .buttonStyle(.link)
-
                 Spacer()
 
-                Button("Continue") {
+                Button("Next") {
                     coordinator.moveToNextStep()
                 }
                 .buttonStyle(.borderedProminent)
@@ -317,14 +312,9 @@ struct AccessibilityStepView: View {
                 }
                 .buttonStyle(.link)
 
-                Button("Skip") {
-                    coordinator.skip()
-                }
-                .buttonStyle(.link)
-
                 Spacer()
 
-                Button("Continue") {
+                Button("Next") {
                     coordinator.moveToNextStep()
                 }
                 .buttonStyle(.borderedProminent)
