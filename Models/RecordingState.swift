@@ -11,18 +11,23 @@ import Foundation
 /// Represents the current state of the recording lifecycle
 ///
 /// This enum drives the entire application state machine, controlling
-/// UI updates for the menu bar icon and Matrix visualizer states.
+/// UI updates for the menu bar icon and visualizer states.
 ///
 /// State transitions:
 /// - idle → recording (user presses hotkey)
 /// - recording → processing (user presses hotkey again)
-/// - processing → success (transcription completes)
-/// - processing → error (transcription fails)
+/// - processing → proofreading (when AI proofreading is enabled)
+/// - processing → success (transcription completes without proofreading)
+/// - proofreading → success (proofreading completes)
+/// - processing/proofreading → error (transcription or proofreading fails)
 /// - success/error → idle (ready for next recording)
+///
+/// - Note: Story 11.5-4 added `.proofreading` state for AI proofreading visualization
 enum RecordingState: Equatable {
     case idle
     case recording(startTime: Date)
     case processing
+    case proofreading
     case success
     case error(Error)
 
@@ -34,6 +39,8 @@ enum RecordingState: Equatable {
         case (.recording(let lhsTime), .recording(let rhsTime)):
             return lhsTime == rhsTime
         case (.processing, .processing):
+            return true
+        case (.proofreading, .proofreading):
             return true
         case (.success, .success):
             return true

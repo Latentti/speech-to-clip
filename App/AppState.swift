@@ -162,6 +162,13 @@ class AppState: ObservableObject {
         return PermissionManager()
     }()
 
+    /// ProofreadingService instance for AI-powered text proofreading
+    /// Story 11.5-5: Proofreads transcribed text using GPT-4o-mini
+    /// Lazy initialization - only created when proofreading is enabled
+    private lazy var proofreadingService: ProofreadingService = {
+        return ProofreadingService()
+    }()
+
     // MARK: - Singleton
 
     /// Shared singleton instance of AppState
@@ -514,8 +521,40 @@ class AppState: ObservableObject {
                 )
             }
 
-            // Success: update transcribed text
-            lastTranscribedText = text
+            // Story 11.5-5: Proofreading step (if enabled)
+            var finalText = text
+            if settings.enableProofreading {
+                print("📝 Proofreading enabled - starting proofreading (text length: \(text.count))")
+                recordingState = .proofreading
+
+                do {
+                    finalText = try await proofreadText(text)
+                    print("✅ Proofreading complete (original: \(text.count) chars → result: \(finalText.count) chars)")
+                } catch {
+                    // Story 11.5-6: Show user-visible error for configuration issues
+                    if let proofError = error as? ProofreadingError {
+                        switch proofError {
+                        case .missingProfile, .missingAPIKey:
+                            // Configuration errors - show to user so they can fix settings
+                            print("⚠️ [Proofreading] Configuration error - showing alert to user")
+                            lastError = proofError
+                        default:
+                            // Other errors (network, server, etc.) - silent fallback
+                            print("⚠️ [Proofreading] Transient error - silent fallback")
+                        }
+                    }
+
+                    // Graceful fallback: use original text if proofreading fails
+                    print("⚠️ Proofreading failed, using original text: \(error.localizedDescription)")
+                    finalText = text
+                    // Don't throw - continue with original text
+                }
+            } else {
+                print("ℹ️ Proofreading disabled - skipping")
+            }
+
+            // Success: update transcribed text (with proofread version if enabled)
+            lastTranscribedText = finalText
 
             // Story 12.3: Clear retry state on successful transcription
             retryAudioData = nil
@@ -524,8 +563,8 @@ class AppState: ObservableObject {
             // Story 5.1: Copy to clipboard (non-blocking fallback)
             // Clipboard errors are logged but don't fail transcription
             do {
-                try clipboardService.copyText(text)
-                print("✅ Copied \(text.count) characters to clipboard")
+                try clipboardService.copyText(finalText)
+                print("✅ Copied \(finalText.count) characters to clipboard")
             } catch {
                 print("⚠️ Clipboard copy failed: \(error.localizedDescription)")
                 // Don't fail transcription if clipboard fails - user can still see text in UI
@@ -540,8 +579,8 @@ class AppState: ObservableObject {
 
                     // Only attempt paste if the active app has a text field focused
                     if activeApp.acceptsTextInput {
-                        try pasteManager.paste(text)
-                        print("✅ Pasted \(text.count) characters to \(activeApp.appName)")
+                        try pasteManager.paste(finalText)
+                        print("✅ Pasted \(finalText.count) characters to \(activeApp.appName)")
                     } else {
                         print("ℹ️ Skipping paste - \(activeApp.appName) does not have text field focused")
                     }
@@ -575,7 +614,7 @@ class AppState: ObservableObject {
             // Transition to success state
             recordingState = .success
             currentAmplitude = 0.0
-            print("✅ Transcription successful: \(text.count) characters")
+            print("✅ Transcription successful: \(finalText.count) characters")
 
             // Auto-reset to idle after 2 seconds to allow next recording
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
@@ -621,6 +660,68 @@ class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Proofread text using AI proofreading service
+    ///
+    /// Story 11.5-5: Proofreads transcribed text using GPT-4o-mini
+    /// - Gets API key from proofreading profile (not transcription profile)
+    /// - Gets language from active transcription profile
+    /// - Returns proofread text on success
+    ///
+    /// - Parameter text: The transcribed text to proofread
+    /// - Returns: Proofread text
+    /// - Throws: ProofreadingError if proofreading fails
+    @MainActor
+    private func proofreadText(_ text: String) async throws -> String {
+        // Story 11.5-6: Validate proofreading profile selection
+        guard let profileId = settings.proofreadingProfileId else {
+            print("⚠️ [Proofreading Validation] No proofreading profile selected in settings")
+            print("   → User action required: Settings → Proofreading → Select OpenAI profile")
+            throw ProofreadingError.missingProfile
+        }
+
+        // Find proofreading profile by ID
+        let profiles = try profileManager.getAllProfiles()
+        guard let proofreadingProfile = profiles.first(where: { $0.id == profileId }) else {
+            print("⚠️ [Proofreading Validation] Profile not found - profileId: \(profileId)")
+            print("   → Profile may have been deleted. User should select a new profile.")
+            throw ProofreadingError.missingProfile
+        }
+
+        // Story 11.5-6: Validate API key exists for profile
+        let keychainService = KeychainService()
+        let apiKey: String
+        do {
+            apiKey = try keychainService.retrieve(for: proofreadingProfile.id)
+        } catch {
+            print("⚠️ [Proofreading Validation] API key not found for profile '\(proofreadingProfile.name)'")
+            print("   → profileId: \(profileId)")
+            print("   → KeychainService error: \(error.localizedDescription)")
+            print("   → User action required: Settings → Profiles → Add API key")
+            throw ProofreadingError.missingAPIKey
+        }
+
+        // Validate API key is not empty
+        guard !apiKey.isEmpty else {
+            print("⚠️ [Proofreading Validation] API key is empty for profile '\(proofreadingProfile.name)'")
+            print("   → profileId: \(profileId)")
+            print("   → User action required: Settings → Profiles → Enter valid API key")
+            throw ProofreadingError.missingAPIKey
+        }
+
+        // Get language from active transcription profile (not proofreading profile)
+        let language = currentProfile?.language ?? settings.defaultLanguage.rawValue
+        print("📝 Proofreading with language: \(language)")
+
+        // Call proofreading service
+        let proofreadResult = try await proofreadingService.proofread(
+            text: text,
+            language: language,
+            apiKey: apiKey
+        )
+
+        return proofreadResult
     }
 
     /// Retry transcription with stored audio data

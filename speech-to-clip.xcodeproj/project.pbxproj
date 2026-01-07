@@ -449,7 +449,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = NJ4KY3NUCX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -466,8 +466,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.latentti.speech-to-clip";
+				PRODUCT_MODULE_NAME = speech_to_clip;
 				PRODUCT_NAME = "Speech to Clip";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -488,7 +489,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = NJ4KY3NUCX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -505,8 +506,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.latentti.speech-to-clip";
+				PRODUCT_MODULE_NAME = speech_to_clip;
 				PRODUCT_NAME = "Speech to Clip";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -535,7 +537,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/speech-to-clip.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/speech-to-clip";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Speech to Clip.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Speech to Clip";
 			};
 			name = Debug;
 		};
@@ -556,7 +558,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/speech-to-clip.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/speech-to-clip";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Speech to Clip.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Speech to Clip";
 			};
 			name = Release;
 		};

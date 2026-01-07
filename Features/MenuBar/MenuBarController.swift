@@ -327,8 +327,9 @@ class MenuBarController: NSObject, NSApplicationDelegate {
             button.image = createWaveformIcon(color: nil)
             button.image?.isTemplate = true
 
-        case .recording, .processing:
+        case .recording, .processing, .proofreading:
             // Lime green waveform (matches visualizer #32CD32)
+            // Story 11.5-4: proofreading state also shows green to indicate active processing
             let limeGreen = NSColor(red: 0.196, green: 0.804, blue: 0.196, alpha: 1.0)
             button.image = createWaveformIcon(color: limeGreen)
             button.image?.isTemplate = false

@@ -95,11 +95,19 @@ class WaveRenderer: ObservableObject {
     /// Opacity for idle state (0.0 = hidden)
     private let idleOpacity: Double = 0.0
 
+    /// Opacity for proofreading state (0.85 = between recording and processing)
+    /// Story 11.5-4: Added for AI proofreading visualization
+    private let proofreadingOpacity: Double = 0.85
+
     /// Green color for recording state (#00FF41)
     private let recordingColor = Color(red: 0, green: 1, blue: 0.255)
 
     /// Yellow color for processing state (#FFFF00)
     private let processingColor = Color(red: 1, green: 1, blue: 0)
+
+    /// Orange color for proofreading state (#FFA500)
+    /// Story 11.5-4: Added for AI proofreading visualization
+    private let proofreadingColor = Color(red: 1, green: 0.647, blue: 0)
 
     /// Minimum pixel amplitude (4px = web prototype)
     private let minPixelAmplitude: CGFloat = 4.0
@@ -177,6 +185,8 @@ class WaveRenderer: ObservableObject {
             targetOpacity = recordingOpacity
         case .processing:
             targetOpacity = processingOpacity
+        case .proofreading:
+            targetOpacity = proofreadingOpacity
         case .idle, .error, .success:
             targetOpacity = idleOpacity
         }
@@ -207,6 +217,9 @@ class WaveRenderer: ObservableObject {
             waveOffset += waveOffsetIncrement
         case .processing:
             processingPhase += processingPhaseIncrement
+        case .proofreading:
+            // Proofreading uses same animation phase as processing (pulse effect)
+            processingPhase += processingPhaseIncrement
         case .idle, .error, .success:
             // No animation updates for idle/error/success
             break
@@ -229,6 +242,8 @@ class WaveRenderer: ObservableObject {
             drawRecordingWave(context: &context, size: size)
         case .processing:
             drawProcessingWave(context: &context, size: size)
+        case .proofreading:
+            drawProofreadingWave(context: &context, size: size)
         case .idle, .error, .success:
             // No visualization for these states
             break
@@ -325,6 +340,63 @@ class WaveRenderer: ObservableObject {
             context.fill(
                 dotPath,
                 with: .color(processingColor.opacity(currentOpacity))
+            )
+        }
+    }
+
+    /// Draw proofreading state wave: orange pulse wave with animated dots
+    ///
+    /// Story 11.5-4: Added for AI proofreading visualization.
+    /// Follows the same pattern as `drawProcessingWave()` but uses orange color (#FFA500)
+    /// to distinguish the proofreading phase from the processing phase.
+    ///
+    /// - Parameters:
+    ///   - context: Graphics context for drawing
+    ///   - size: Canvas size
+    private func drawProofreadingWave(context: inout GraphicsContext, size: CGSize) {
+        let pixelAmplitude = calculatePixelAmplitude(from: currentAmplitude)
+
+        // Rhythmic pulse: amplitude modulated by sine wave (same as processing)
+        let pulseAmplitude = pixelAmplitude + sin(processingPhase) * 5
+
+        var path = Path()
+        var isFirst = true
+
+        // Generate wave path
+        for y in stride(from: 0, to: size.height, by: 2) {
+            let wave = sin(y * 0.03 + processingPhase) * pulseAmplitude
+            let x = size.width / 2 + wave
+
+            if isFirst {
+                path.move(to: CGPoint(x: x, y: y))
+                isFirst = false
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+
+        // Draw the wave path with orange color
+        context.stroke(
+            path,
+            with: .color(proofreadingColor.opacity(currentOpacity)),
+            lineWidth: 3
+        )
+
+        // Draw 3 animated dots along the wave (same pattern as processing)
+        for i in 0..<3 {
+            let baseY = (size.height / 4) * (CGFloat(i) + 0.5)
+            let dotY = baseY + sin(processingPhase + CGFloat(i)) * 20
+
+            let dotPath = Path(ellipseIn: CGRect(
+                x: size.width / 2 - 2,
+                y: dotY - 2,
+                width: 4,
+                height: 4
+            ))
+
+            context.fill(
+                dotPath,
+                with: .color(proofreadingColor.opacity(currentOpacity))
             )
         }
     }

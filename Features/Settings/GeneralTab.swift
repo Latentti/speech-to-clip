@@ -13,6 +13,8 @@ import ServiceManagement
 ///
 /// This view provides controls for:
 /// - Hotkey customization (Story 6.3 - full implementation)
+/// - Translation toggle
+/// - AI Proofreading toggle and profile selection (Story 11.5-3)
 /// - Launch at login toggle
 /// - Show notifications toggle
 ///
@@ -23,6 +25,7 @@ import ServiceManagement
 ///
 /// - Note: Story 6.2 - General settings tab layout
 /// - Note: Story 6.3 - Hotkey capture functionality
+/// - Note: Story 11.5-3 - AI Proofreading settings
 struct GeneralTab: View {
     // MARK: - Properties
 
@@ -32,6 +35,27 @@ struct GeneralTab: View {
     /// Alert state for hotkey update errors
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+
+    /// Profile manager for loading profiles
+    /// Story 11.5-3: Used to get all profiles for filtering OpenAI profiles
+    private let profileManager = ProfileManager()
+
+    /// All profiles loaded from storage
+    /// Story 11.5-3: State variable to hold profiles for the picker
+    @State private var allProfiles: [Profile] = []
+
+    // MARK: - Computed Properties
+
+    /// OpenAI profiles available for proofreading API key
+    ///
+    /// Filters all profiles to only include those with transcriptionEngine == .openai.
+    /// These are the only profiles that can be used for proofreading since it requires
+    /// an OpenAI API key for GPT-4o-mini access.
+    ///
+    /// - Note: Story 11.5-3 AC 3 - Profile picker shows only OpenAI profiles
+    private var openAIProfiles: [Profile] {
+        allProfiles.filter { $0.transcriptionEngine == .openai }
+    }
 
     // MARK: - Body
 
@@ -92,6 +116,46 @@ struct GeneralTab: View {
                     .font(.headline)
             }
 
+            // MARK: AI Proofreading
+            // Story 11.5-3: Add Proofreading UI to Settings
+
+            Section {
+                Toggle("Enable AI Proofreading", isOn: $appState.settings.enableProofreading)
+                    .disabled(openAIProfiles.isEmpty)
+                    .onChange(of: appState.settings.enableProofreading) { newValue in
+                        print("⚙️ Proofreading enabled changed to: \(newValue)")
+                        saveSettings()
+                    }
+
+                Text("Fixes spelling, punctuation, and capitalization using AI.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
+
+                if openAIProfiles.isEmpty {
+                    // Story 11.5-3 AC 5: Show explanation when no OpenAI profiles exist
+                    Text("Requires OpenAI API key. Add an OpenAI profile in the Profiles tab.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.top, 2)
+                } else {
+                    // Story 11.5-3 AC 3, 4: Profile picker for OpenAI profiles
+                    Picker("OpenAI Profile", selection: $appState.settings.proofreadingProfileId) {
+                        Text("None").tag(nil as UUID?)
+                        ForEach(openAIProfiles) { profile in
+                            Text(profile.name).tag(profile.id as UUID?)
+                        }
+                    }
+                    .onChange(of: appState.settings.proofreadingProfileId) { newValue in
+                        print("⚙️ Proofreading profile changed to: \(newValue?.uuidString ?? "None")")
+                        saveSettings()
+                    }
+                }
+            } header: {
+                Text("AI Proofreading")
+                    .font(.headline)
+            }
+
             // MARK: App Behavior
 
             Section {
@@ -130,9 +194,38 @@ struct GeneralTab: View {
         } message: {
             Text(errorMessage)
         }
+        .onAppear {
+            loadProfiles()
+        }
     }
 
     // MARK: - Actions
+
+    /// Loads all profiles from ProfileManager
+    ///
+    /// Story 11.5-3: Called on view appear to populate the profiles list
+    /// for the proofreading profile picker. Also pre-selects current OpenAI
+    /// profile if no proofreading profile is set yet.
+    ///
+    /// - Note: Story 11.5-3 AC 4 - Pre-select current profile if OpenAI
+    private func loadProfiles() {
+        do {
+            allProfiles = try profileManager.getAllProfiles()
+            print("✅ GeneralTab: Loaded \(allProfiles.count) profiles, \(openAIProfiles.count) OpenAI profiles")
+
+            // Story 11.5-3 AC 4: Pre-select current active profile if it's OpenAI and no proofreading profile set
+            if appState.settings.proofreadingProfileId == nil,
+               let activeProfileId = appState.settings.activeProfileID,
+               let activeProfile = allProfiles.first(where: { $0.id == activeProfileId }),
+               activeProfile.transcriptionEngine == .openai {
+                appState.settings.proofreadingProfileId = activeProfileId
+                saveSettings()
+                print("✅ Pre-selected active OpenAI profile for proofreading: \(activeProfile.name)")
+            }
+        } catch {
+            print("❌ GeneralTab: Failed to load profiles: \(error.localizedDescription)")
+        }
+    }
 
     /// Handles hotkey change from HotkeyCapture component
     ///

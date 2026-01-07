@@ -138,8 +138,9 @@ class VisualizerWindow {
     /// hide only during idle (no idle visualization per AC4)
     private func handleRecordingStateChange(_ state: RecordingState) {
         switch state {
-        case .recording, .processing:
-            // Show window during recording and processing (skip if already visible)
+        case .recording, .processing, .proofreading:
+            // Show window during recording, processing, and proofreading (skip if already visible)
+            // Story 11.5-4: Added proofreading state for AI proofreading visualization
             if !isWindowVisible {
                 showWindow()
             }

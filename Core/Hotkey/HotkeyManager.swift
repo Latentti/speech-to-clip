@@ -189,7 +189,7 @@ class HotkeyManager {
                 // AppState handles state transition, audio data retrieval, and error handling
                 appState.stopRecording()
 
-            case .processing, .success, .error:
+            case .processing, .proofreading, .success, .error:
                 // Ignore hotkey presses during these states
                 print("⏭️ Hotkey ignored - app is currently \(currentState)")
             }

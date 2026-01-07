@@ -216,6 +216,76 @@ final class WaveRendererTests: XCTestCase {
         XCTAssertEqual(renderer.currentRecordingState, .processing, "Should remain in processing state")
     }
 
+    // MARK: - Proofreading State Tests (Story 11.5-4)
+
+    /// Test opacity changes for proofreading state (Story 11.5-4 AC: 3)
+    func testOpacityInterpolationForProofreadingState() async {
+        // Given: Renderer starts in idle
+        XCTAssertEqual(renderer.opacity, 0.0)
+
+        // When: State changes to proofreading
+        appState.recordingState = .proofreading
+
+        // Give subscription time to propagate
+        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+
+        // Then: Update multiple times
+        for _ in 0..<100 {
+            renderer.update()
+        }
+
+        // Should approach proofreading opacity (0.85)
+        XCTAssertGreaterThan(renderer.opacity, 0.80, "Should approach proofreading opacity (0.85)")
+        XCTAssertLessThanOrEqual(renderer.opacity, 0.90, "Should not exceed target opacity")
+    }
+
+    /// Test that proofreading state is tracked correctly (Story 11.5-4 AC: 4, 5)
+    func testProofreadingStateTracking() async {
+        // Given: Initial idle state
+        XCTAssertEqual(renderer.currentRecordingState, .idle)
+
+        // When: State changes from processing to proofreading
+        appState.recordingState = .processing
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(renderer.currentRecordingState, .processing, "Should track processing state")
+
+        appState.recordingState = .proofreading
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        // Then: State is proofreading
+        XCTAssertEqual(renderer.currentRecordingState, .proofreading, "Should track proofreading state")
+    }
+
+    /// Test that update() increments processing phase during proofreading (Story 11.5-4 AC: 6)
+    func testProofreadingPhaseIncrementsDuringProofreading() async {
+        // Given: Proofreading state
+        appState.recordingState = .proofreading
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        // When: Update is called multiple times
+        for _ in 0..<10 {
+            renderer.update()
+        }
+
+        // Then: Processing phase should have incremented (reuses processingPhase for animation)
+        // (We can't directly test private processingPhase, but we verify no crashes and correct state)
+        XCTAssertEqual(renderer.currentRecordingState, .proofreading, "Should remain in proofreading state")
+    }
+
+    /// Test RecordingState.proofreading equality (Story 11.5-4 AC: 1, 2)
+    func testRecordingStateProofreadingEquality() {
+        // Given: Two proofreading states
+        let state1 = RecordingState.proofreading
+        let state2 = RecordingState.proofreading
+
+        // Then: They should be equal
+        XCTAssertEqual(state1, state2, ".proofreading should equal .proofreading")
+
+        // And: Proofreading should not equal other states
+        XCTAssertNotEqual(state1, RecordingState.processing, ".proofreading should not equal .processing")
+        XCTAssertNotEqual(state1, RecordingState.idle, ".proofreading should not equal .idle")
+    }
+
     // MARK: - AppState Subscription Tests
 
     /// Test that renderer subscribes to AppState amplitude

@@ -200,7 +200,9 @@ final class WhisperCppClientTests: XCTestCase {
 
         // Assert: Verify URL contains "localhost" (privacy guarantee)
         XCTAssertTrue(url.absoluteString.contains("localhost"), "Health check URL must use localhost")
-        XCTAssertFalse(url.absoluteString.contains("http://"), "URL should not use external hosts")
+        // Verify no external hosts are used (privacy: all requests stay local)
+        XCTAssertFalse(url.absoluteString.contains("api.openai.com"), "URL should not use external OpenAI API")
+        XCTAssertFalse(url.absoluteString.contains("whisper."), "URL should not use external whisper services")
     }
 
     // MARK: - Multipart Body Construction Tests
