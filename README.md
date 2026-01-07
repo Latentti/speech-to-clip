@@ -31,6 +31,8 @@ Speech to Clip supports **two powerful transcription options**—pick what matte
 
 - 🎤 **Voice Recording** - Press a hotkey (default: Control+Space) to start/stop recording
 - 🌊 **Wave Visualizer** - Floating wave animation on screen edge that responds to your voice amplitude
+- ✨ **AI Proofreading** - Optional GPT-4o-mini powered spelling, punctuation, and capitalization correction
+- 🌐 **Translation Mode** - Translate speech to English from any supported language
 - 📋 **Smart Auto-Paste** - Intelligently pastes text with seamless clipboard fallback
 - 💚 **Custom Menubar Icon** - Elegant S-curve waveform that turns lime green when recording
 - ⚙️ **Multiple Profiles** - Create profiles for different engines, languages, and use cases
@@ -116,6 +118,7 @@ Click the menu bar icon → **Settings** to configure:
 
 - **General Tab**:
   - Language selection (55+ languages supported)
+  - Translation mode (translate any language to English)
   - Launch at login
   - Notification preferences
 
@@ -124,8 +127,14 @@ Click the menu bar icon → **Settings** to configure:
   - Default: Control+Space
   - Supports: Command, Option, Control, Shift combinations
 
+- **Proofreading Tab**:
+  - Enable/disable AI proofreading
+  - Select OpenAI profile for proofreading API key
+  - Uses GPT-4o-mini for fast, accurate corrections
+
 - **Profiles Tab**:
   - Create multiple profiles with different:
+    - Transcription engine (OpenAI API or Local Whisper)
     - API keys (useful for team accounts)
     - Language settings
     - Custom configurations
@@ -181,6 +190,12 @@ speech-to-clip/
 │   │   ├── Profile.swift        # Profile model (language, API key per profile)
 │   │   ├── HotkeyConfig.swift   # Hotkey configuration (Codable wrapper)
 │   │   └── SpeechToClipError.swift  # Error types with user-friendly messages
+│   ├── Core/                    # Core business logic
+│   │   ├── Proofreading/        # AI proofreading
+│   │   │   ├── ProofreadingService.swift  # GPT-4o-mini API client
+│   │   │   └── ProofreadingError.swift    # Error types with recovery suggestions
+│   │   └── Transcription/       # Speech-to-text
+│   │       └── WhisperCppClient.swift     # Local Whisper client
 │   ├── Services/                # Business logic services
 │   │   ├── AudioRecorder.swift  # AVFoundation audio recording
 │   │   ├── TranscriptionService.swift  # Whisper API integration
@@ -242,6 +257,7 @@ speech-to-clip/
 **Services** - Independent, testable business logic:
 - `AudioRecorder` - Manages AVAudioEngine recording with amplitude detection
 - `TranscriptionService` - Whisper API client with audio format conversion
+- `ProofreadingService` - GPT-4o-mini text correction (spelling, punctuation, capitalization)
 - `PasteService` - Accessibility API for programmatic paste
 - `KeychainService` - Secure credential storage
 - `PermissionService` - Runtime permission checks
@@ -261,14 +277,16 @@ AppState toggles recording
     ↓
 AudioRecorder starts/stops AVAudioEngine
     ↓ (amplitude data)
-WaveRenderer adjusts visualizer intensity
+WaveRenderer adjusts visualizer intensity (green wave)
     ↓ (on stop)
 AudioRecorder saves .m4a file
     ↓
 TranscriptionService converts to MP3 & sends to Whisper API
-    ↓
+    ↓ (yellow wave during processing)
 API returns transcribed text
     ↓
+ProofreadingService corrects text via GPT-4o-mini (if enabled)
+    ↓ (orange wave during proofreading)
 ClipboardManager copies to clipboard
     ↓
 PasteService simulates Cmd+V in active app
@@ -379,16 +397,18 @@ Log levels:
 
 ## Roadmap
 
-Potential future enhancements:
+**Completed:**
+- [x] Multi-language translation support (v0.2.0)
+- [x] Offline mode with Local Whisper (v0.3.0)
+- [x] AI Proofreading with GPT-4o-mini (v0.3.2)
 
+**Potential future enhancements:**
 - [ ] Transcription history with searchable archive
-- [ ] Multi-language translation support
 - [ ] Audio editing before transcription
 - [ ] Batch file transcription
 - [ ] Custom Whisper prompt templates
 - [ ] Alternative AI providers (AssemblyAI, Deepgram)
 - [ ] Advanced voice activity detection
-- [ ] Offline mode with local Whisper model
 
 ## Contributing
 
