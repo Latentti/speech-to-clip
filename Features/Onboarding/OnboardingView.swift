@@ -213,11 +213,15 @@ struct MicrophoneStepView: View {
 
                 Spacer()
 
-                Button("Next") {
-                    coordinator.moveToNextStep()
+                // Only show Next button after permission has been requested
+                // Apple Guideline 5.1.1: Users must proceed to permission request
+                if coordinator.microphonePermissionStatus != .notDetermined {
+                    Button("Next") {
+                        coordinator.moveToNextStep()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 20)
@@ -314,11 +318,15 @@ struct AccessibilityStepView: View {
 
                 Spacer()
 
-                Button("Next") {
-                    coordinator.moveToNextStep()
+                // Only show Next button after permission has been granted
+                // Apple Guideline 5.1.1: Users must proceed to permission request
+                if coordinator.accessibilityPermissionStatus == .authorized {
+                    Button("Next") {
+                        coordinator.moveToNextStep()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 20)
