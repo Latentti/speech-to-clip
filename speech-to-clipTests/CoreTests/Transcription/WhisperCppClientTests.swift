@@ -251,6 +251,26 @@ final class WhisperCppClientTests: XCTestCase {
         XCTAssertEqual(result, "test transcription result", "Transcription should return expected text")
     }
 
+    /// Test that newline-separated server segments are joined into one line
+    func testTranscriptionJoinsServerSegments() async throws {
+        // Arrange: Mock response shaped like real whisper-server output
+        let url = URL(string: "http://localhost:8080/inference")!
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let jsonResponse = "{\"text\":\"Selvä, sovitaan näin.\\n Ja sisältö on laajentunut.\\nKiitos.\\n,\\n\"}".data(using: .utf8)!
+        MockURLProtocol.mockResponse = (jsonResponse, response, nil)
+
+        // Act: Transcribe audio
+        let result = try await client.transcribe(
+            audioData: Data("test audio".utf8),
+            model: "base",
+            port: 8080,
+            language: "fi"
+        )
+
+        // Assert: No line breaks remain and segments are separated by single spaces
+        XCTAssertEqual(result, "Selvä, sovitaan näin. Ja sisältö on laajentunut. Kiitos.")
+    }
+
     /// Test transcription failure with HTTP 400 (AC6: invalid response)
     func testTranscriptionFailure_HTTP400() async throws {
         // Arrange: Mock HTTP 400 (Bad Request)

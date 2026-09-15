@@ -198,6 +198,18 @@ actor WhisperCppClient {
         body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
         body.append("\(language)\r\n")
 
+        // Segmentation parts
+        // whisper-server defaults to 60-character segments split on tokens, which
+        // breaks words across the newline-separated output ("Kä\nydään").
+        // Splitting on words with a generous length keeps words intact.
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"split_on_word\"\r\n\r\n")
+        body.append("true\r\n")
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"max_len\"\r\n\r\n")
+        body.append("1000\r\n")
+
         // Translate part (when enabled, whisper.cpp translates to English)
         if translate {
             body.append("--\(boundary)\r\n")
@@ -316,7 +328,9 @@ actor WhisperCppClient {
             throw WhisperCppError.invalidResponse
         }
 
-        logger.info("Transcription successful (length: \(result.text.count) characters)")
-        return result.text
+        // The server separates segments with newlines; join them into one line of text
+        let text = WhisperTextNormalizer.normalize(result.text)
+        logger.info("Transcription successful (length: \(text.count) characters)")
+        return text
     }
 }
