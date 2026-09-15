@@ -175,6 +175,12 @@ class HotkeyManager {
         // Dispatch to main actor for AppState method calls
         // AppState is marked with @MainActor
         Task { @MainActor in
+            // Dictation is disabled while a meeting is being transcribed
+            guard !MeetingSession.shared.isActive else {
+                print("⏭️ Hotkey ignored - meeting transcription is running")
+                return
+            }
+
             // Get current recording state
             let currentState = appState.recordingState
 

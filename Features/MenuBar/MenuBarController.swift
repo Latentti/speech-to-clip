@@ -44,6 +44,10 @@ class MenuBarController: NSObject, NSApplicationDelegate {
     // Story 12.1: Error alert presentation
     private var errorAlertCancellable: AnyCancellable?
 
+    // Meeting transcription window and menu state
+    private let meetingWindowController = MeetingWindowController()
+    private var meetingStateCancellable: AnyCancellable?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupHotkey()
@@ -53,6 +57,10 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         setupProfileObservers()
         setupRecordingStateObserver()
         setupErrorAlertObserver()
+        setupMeetingObserver()
+
+        // Transcribe audio chunks left behind by an interrupted meeting
+        MeetingSession.shared.recoverPendingChunks()
     }
 
     /// Set up NotificationCenter observers for profile changes
@@ -321,6 +329,13 @@ class MenuBarController: NSObject, NSApplicationDelegate {
     private func updateMenuBarIcon(for state: RecordingState) {
         guard let button = statusItem?.button else { return }
 
+        // Meeting transcription: red waveform for the whole session
+        if MeetingSession.shared.isActive {
+            button.image = createWaveformIcon(color: .systemRed)
+            button.image?.isTemplate = false
+            return
+        }
+
         switch state {
         case .idle:
             // White waveform (template mode for system appearance)
@@ -427,6 +442,12 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         // Add separator
         menu.addItem(NSMenuItem.separator())
 
+        // Meeting transcription section
+        buildMeetingSection(menu: menu)
+
+        // Add separator
+        menu.addItem(NSMenuItem.separator())
+
         // Story 7.4: Add profile section
         buildProfileSection(menu: menu)
 
@@ -444,6 +465,9 @@ class MenuBarController: NSObject, NSApplicationDelegate {
 
         // Attach menu to status item
         statusItem.menu = menu
+
+        // The rebuilt status item starts with the idle icon; restore the current one
+        updateMenuBarIcon(for: appState?.recordingState ?? .idle)
     }
 
     @objc private func openSettings() {
@@ -453,6 +477,58 @@ class MenuBarController: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - Meeting Transcription
+
+    /// Add start/stop and transcript window items for meeting transcription
+    private func buildMeetingSection(menu: NSMenu) {
+        let session = MeetingSession.shared
+
+        let title: String
+        switch session.state {
+        case .idle: title = "Aloita palaveri"
+        case .starting: title = "Palaveri käynnistyy…"
+        case .running: title = "Lopeta palaveri"
+        case .stopping: title = "Litteroidaan loppuun…"
+        }
+        let toggleItem = NSMenuItem(title: title, action: #selector(toggleMeeting), keyEquivalent: "")
+        toggleItem.target = self
+        toggleItem.isEnabled = session.state == .idle || session.state == .running
+        menu.addItem(toggleItem)
+
+        let windowItem = NSMenuItem(title: "Näytä palaverin transkripti", action: #selector(showMeetingWindow), keyEquivalent: "")
+        windowItem.target = self
+        menu.addItem(windowItem)
+    }
+
+    @objc private func toggleMeeting() {
+        let session = MeetingSession.shared
+        switch session.state {
+        case .idle:
+            meetingWindowController.show()
+            Task { await session.start() }
+        case .running:
+            session.stop()
+        case .starting, .stopping:
+            break
+        }
+    }
+
+    @objc private func showMeetingWindow() {
+        meetingWindowController.show()
+    }
+
+    /// Rebuild the menu and icon whenever the meeting state changes
+    private func setupMeetingObserver() {
+        meetingStateCancellable = MeetingSession.shared.$state
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                // @Published emits before the new value is stored; read it on the next run loop pass
+                DispatchQueue.main.async {
+                    self?.setupMenuBar()
+                }
+            }
     }
 
     // MARK: - Profile Management (Story 7.4)
