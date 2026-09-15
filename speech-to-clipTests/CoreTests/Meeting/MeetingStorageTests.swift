@@ -13,6 +13,7 @@ import XCTest
 final class MeetingStorageTests: XCTestCase {
 
     private let utc = TimeZone(identifier: "UTC")!
+    private let start = Date(timeIntervalSince1970: 1_789_470_000) // 2026-09-15 11:00:00 UTC
     private var temporaryRoot: URL!
 
     override func setUpWithError() throws {
@@ -28,6 +29,42 @@ final class MeetingStorageTests: XCTestCase {
 
     func testRootFolderIsMeetingsInDocuments() {
         XCTAssertTrue(MeetingStorage.rootURL.path.hasSuffix("/Documents/Meetings"))
+    }
+
+    // MARK: - Titles in Folder Names
+
+    func testFolderNameIncludesTitle() {
+        XCTAssertEqual(MeetingStorage.folderName(for: start, timeZone: utc), "2026-09-15_1100")
+        XCTAssertEqual(
+            MeetingStorage.folderName(for: start, title: "  Asiakas Oy – ohjausryhmä ", timeZone: utc),
+            "2026-09-15_1100 Asiakas Oy – ohjausryhmä"
+        )
+    }
+
+    func testFolderTitleIsSafeForFileSystem() {
+        XCTAssertEqual(MeetingStorage.folderSafeTitle("Q3/Q4: budjetti\nja resurssit"), "Q3-Q4- budjetti ja resurssit")
+        XCTAssertEqual(MeetingStorage.folderSafeTitle("..piilotettu"), "piilotettu")
+        XCTAssertEqual(MeetingStorage.folderSafeTitle(String(repeating: "a", count: 200)).count, MeetingStorage.maximumFolderTitleLength)
+    }
+
+    func testRenameFolderWhenTitleChanges() throws {
+        let folder = try MeetingStorage.createSessionFolder(for: start, in: temporaryRoot, timeZone: utc)
+
+        let renamed = try MeetingStorage.renameSessionFolder(folder, start: start, title: "Asiakas Oy", timeZone: utc)
+
+        XCTAssertEqual(renamed.lastPathComponent, "2026-09-15_1100 Asiakas Oy")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.appendingPathComponent(MeetingStorage.sessionFileName).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    func testRenameKeepsFolderWithCollisionSuffix() throws {
+        _ = try MeetingStorage.createSessionFolder(for: start, title: "Asiakas Oy", in: temporaryRoot, timeZone: utc)
+        let second = try MeetingStorage.createSessionFolder(for: start, title: "Asiakas Oy", in: temporaryRoot, timeZone: utc)
+        XCTAssertEqual(second.lastPathComponent, "2026-09-15_1100 Asiakas Oy-2")
+
+        let renamed = try MeetingStorage.renameSessionFolder(second, start: start, title: "Asiakas Oy", timeZone: utc)
+
+        XCTAssertEqual(renamed, second)
     }
 
     // MARK: - Pending Chunk Names
@@ -58,7 +95,6 @@ final class MeetingStorageTests: XCTestCase {
     // MARK: - Transcript Format
 
     func testTranscriptLineUsesClockTimeAndSpeaker() {
-        let start = Date(timeIntervalSince1970: 1_789_470_000) // 2026-09-15 11:00:00 UTC
         let segment = TranscriptSegment(speaker: .others, startTime: 135, endTime: 140, text: "Asiakas toivoo versiota lokakuussa.")
 
         let line = TranscriptFormatter.line(for: segment, meetingStart: start, timeZone: utc)
@@ -66,41 +102,36 @@ final class MeetingStorageTests: XCTestCase {
         XCTAssertEqual(line, "[11:02:15] Others: Asiakas toivoo versiota lokakuussa.\n\n")
     }
 
-    func testDocumentHasHeaderVocabularyAndChronologicalTurns() {
-        let start = Date(timeIntervalSince1970: 1_789_470_000)
+    func testDocumentHasTitledHeaderAndChronologicalTurns() {
         let turns = TranscriptMerger.merge([
             TranscriptSegment(speaker: .me, startTime: 20, endTime: 25, text: "Toinen."),
             TranscriptSegment(speaker: .others, startTime: 5, endTime: 10, text: "Ensimmäinen."),
         ])
 
-        let document = TranscriptFormatter.document(turns: turns, meetingStart: start, vocabulary: " Wärtsilä, CGI ", timeZone: utc)
+        let document = TranscriptFormatter.document(turns: turns, meetingStart: start, title: " Asiakas Oy\n ohjausryhmä ", timeZone: utc)
 
         XCTAssertEqual(
             document,
-            "# Meeting 2026-09-15 11:00\n\nVocabulary: Wärtsilä, CGI\n\n[11:00:05] Others: Ensimmäinen.\n\n[11:00:20] Me: Toinen.\n\n"
+            "# Meeting 2026-09-15 11:00 – Asiakas Oy ohjausryhmä\n\n[11:00:05] Others: Ensimmäinen.\n\n[11:00:20] Me: Toinen.\n\n"
         )
     }
 
-    func testHeaderWithoutVocabulary() {
-        let start = Date(timeIntervalSince1970: 1_789_470_000)
-
+    func testHeaderWithoutTitle() {
         XCTAssertEqual(TranscriptFormatter.header(meetingStart: start, timeZone: utc), "# Meeting 2026-09-15 11:00\n\n")
     }
 
     // MARK: - Session Folders and Writer
 
     func testSessionFolderWriterAndPendingDetection() throws {
-        let start = Date(timeIntervalSince1970: 1_789_470_000)
-
         let folder = try MeetingStorage.createSessionFolder(for: start, in: temporaryRoot, timeZone: utc)
         XCTAssertEqual(folder.lastPathComponent, "2026-09-15_1100")
         XCTAssertEqual(MeetingStorage.sessionStart(in: folder)?.timeIntervalSince1970 ?? 0, start.timeIntervalSince1970, accuracy: 1)
 
-        let writer = try TranscriptWriter(folderURL: folder, meetingStart: start, vocabulary: "Etteplan")
+        let writer = try TranscriptWriter(folderURL: folder, meetingStart: start, title: "Etteplan")
         try writer.append(TranscriptSegment(speaker: .me, startTime: 1, endTime: 2, text: "Ensimmäinen rivi."))
         let contents = try String(contentsOf: writer.transcriptURL, encoding: .utf8)
         XCTAssertTrue(contents.hasPrefix("# Meeting"))
-        XCTAssertTrue(contents.contains("Vocabulary: Etteplan"))
+        XCTAssertTrue(contents.contains("– Etteplan"))
         XCTAssertTrue(contents.contains("Me: Ensimmäinen rivi."))
 
         XCTAssertTrue(MeetingStorage.foldersWithPendingChunks(in: temporaryRoot).isEmpty)
@@ -114,7 +145,6 @@ final class MeetingStorageTests: XCTestCase {
     }
 
     func testRewriteWritesTurnsAndRemovesEmptyPendingFolder() throws {
-        let start = Date(timeIntervalSince1970: 1_789_470_000)
         let folder = try MeetingStorage.createSessionFolder(for: start, in: temporaryRoot, timeZone: utc)
         let writer = try TranscriptWriter(folderURL: folder, meetingStart: start)
 
@@ -126,7 +156,7 @@ final class MeetingStorageTests: XCTestCase {
         for fragment in fragments {
             try writer.append(fragment)
         }
-        writer.vocabulary = "CGI"
+        writer.title = "CGI"
         try writer.rewrite(with: TranscriptMerger.merge(fragments))
         writer.removePendingFolderIfEmpty()
 
@@ -134,7 +164,8 @@ final class MeetingStorageTests: XCTestCase {
         let earlyRange = try XCTUnwrap(contents.range(of: "Aiempi."))
         let lateRange = try XCTUnwrap(contents.range(of: "koska tota niitten toiminta perustuu myyntiin."))
         XCTAssertLessThan(earlyRange.lowerBound, lateRange.lowerBound)
-        XCTAssertTrue(contents.contains("Vocabulary: CGI"))
+        XCTAssertTrue(contents.hasPrefix("# Meeting 2026-09-15"))
+        XCTAssertTrue(contents.contains("– CGI\n"))
         XCTAssertFalse(contents.contains(" -"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: writer.pendingURL.path))
     }

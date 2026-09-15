@@ -188,7 +188,7 @@ Transcribe Teams, Google Meet and Slack huddle meetings live with Local Whisper.
 3. Follow the transcript in the **Meeting Transcript** window
 4. Menu bar or window → **Stop Meeting Transcription**
 
-Transcripts are saved to `~/Documents/Meetings/<yyyy-MM-dd_HHmm>/transcript.md`.
+Transcripts are saved to `~/Documents/Meetings/<yyyy-MM-dd_HHmm> <title>/transcript.md`. They are raw material for memo writing: words are kept as transcribed, and names, terms and proofreading are left to the memo step.
 
 **How it works**
 - System audio is captured with a Core Audio process tap (macOS 14.4+). macOS asks once for permission to record system audio; screen recording permission is not needed
@@ -197,7 +197,7 @@ Transcripts are saved to `~/Documents/Meetings/<yyyy-MM-dd_HHmm>/transcript.md`.
 - Every chunk is saved to `.pending/` before transcription; chunks left by a crash are transcribed on the next launch
 - Microphone lines that repeat the other participants (speaker echo) are dropped
 - When the meeting ends, fragments are joined into speaker turns in chronological order
-- **Vocabulary**: names and terms written to the top of the transcript for memo processing
+- **Title**: added to the transcript heading and the folder name so that a memo project can find the meetings of one client
 - **Settings → General → Meeting Transcription**: choose which Local Whisper profile meetings use
 
 **Notes**

@@ -19,15 +19,21 @@ nonisolated struct PendingChunk: Equatable {
 /// Locations and folder layout for meeting transcripts
 ///
 /// ```
-/// ~/Documents/Meetings/2026-09-15_1400/
+/// ~/Documents/Meetings/2026-09-15_1400 Client Oy – steering group/
 ///   transcript.md     transcript, appended after every segment
 ///   session.json      meeting start time (used for crash recovery)
 ///   .pending/         WAV chunks not yet transcribed
 /// ```
+///
+/// The title in the folder name lets a memo project pick the transcripts of
+/// one client without separate sorting.
 nonisolated enum MeetingStorage {
     static let transcriptFileName = "transcript.md"
     static let sessionFileName = "session.json"
     static let pendingFolderName = ".pending"
+
+    /// Longest title kept in a folder name
+    static let maximumFolderTitleLength = 80
 
     /// `~/Documents/Meetings` in the real home folder (the sandbox container home is not used)
     ///
@@ -36,17 +42,16 @@ nonisolated enum MeetingStorage {
         realHomeDirectory().appendingPathComponent("Documents/Meetings", isDirectory: true)
     }
 
-    /// Create a new session folder named after the meeting start time
+    /// Create a new session folder named after the meeting start time and title
     ///
-    /// Adds a `-2`, `-3`… suffix if a folder for the same minute already exists.
-    static func createSessionFolder(for start: Date, in root: URL = rootURL, timeZone: TimeZone = .current) throws -> URL {
-        let baseName = folderName(for: start, timeZone: timeZone)
-        var folder = root.appendingPathComponent(baseName, isDirectory: true)
-        var suffix = 2
-        while FileManager.default.fileExists(atPath: folder.path) {
-            folder = root.appendingPathComponent("\(baseName)-\(suffix)", isDirectory: true)
-            suffix += 1
-        }
+    /// Adds a `-2`, `-3`… suffix if a folder with the same name already exists.
+    static func createSessionFolder(
+        for start: Date,
+        title: String = "",
+        in root: URL = rootURL,
+        timeZone: TimeZone = .current
+    ) throws -> URL {
+        let folder = uniqueFolderURL(named: folderName(for: start, title: title, timeZone: timeZone), in: root)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let info = ["startedAt": ISO8601DateFormatter().string(from: start)]
@@ -55,9 +60,34 @@ nonisolated enum MeetingStorage {
         return folder
     }
 
-    /// Folder name such as `2026-09-15_1400`
-    static func folderName(for start: Date, timeZone: TimeZone = .current) -> String {
-        TranscriptFormatter.format(start, pattern: "yyyy-MM-dd_HHmm", timeZone: timeZone)
+    /// Rename a session folder when the title was changed during the meeting
+    ///
+    /// - Returns: The folder's URL after renaming (unchanged if the name already matches)
+    static func renameSessionFolder(_ folder: URL, start: Date, title: String, timeZone: TimeZone = .current) throws -> URL {
+        let desiredName = folderName(for: start, title: title, timeZone: timeZone)
+        let currentName = folder.lastPathComponent
+        let hasCollisionSuffix = currentName.hasPrefix(desiredName + "-")
+            && Int(currentName.dropFirst(desiredName.count + 1)) != nil
+        guard currentName != desiredName && !hasCollisionSuffix else { return folder }
+
+        let target = uniqueFolderURL(named: desiredName, in: folder.deletingLastPathComponent())
+        try FileManager.default.moveItem(at: folder, to: target)
+        return target
+    }
+
+    /// Folder name such as `2026-09-15_1400` or `2026-09-15_1400 Client Oy – steering group`
+    static func folderName(for start: Date, title: String = "", timeZone: TimeZone = .current) -> String {
+        let stamp = TranscriptFormatter.format(start, pattern: "yyyy-MM-dd_HHmm", timeZone: timeZone)
+        let safeTitle = folderSafeTitle(title)
+        return safeTitle.isEmpty ? stamp : "\(stamp) \(safeTitle)"
+    }
+
+    /// Title usable in a folder name: one line, no path separators, not hidden, at most 80 characters
+    static func folderSafeTitle(_ title: String) -> String {
+        let singleLine = TranscriptFormatter.singleLineTitle(title)
+        let withoutSeparators = singleLine.replacingOccurrences(of: "[/:\\\\]", with: "-", options: .regularExpression)
+        let visible = String(withoutSeparators.drop { $0 == "." || $0 == " " })
+        return String(visible.prefix(maximumFolderTitleLength)).trimmingCharacters(in: .whitespaces)
     }
 
     /// Meeting start time stored in a session folder
@@ -87,6 +117,16 @@ nonisolated enum MeetingStorage {
                 return names.contains { PendingChunkName.parse($0) != nil }
             }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    private static func uniqueFolderURL(named name: String, in root: URL) -> URL {
+        var folder = root.appendingPathComponent(name, isDirectory: true)
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: folder.path) {
+            folder = root.appendingPathComponent("\(name)-\(suffix)", isDirectory: true)
+            suffix += 1
+        }
+        return folder
     }
 
     private static func realHomeDirectory() -> URL {
@@ -121,18 +161,15 @@ nonisolated enum PendingChunkName {
 }
 
 /// Markdown formatting of the meeting transcript
+///
+/// The transcript is raw material for a separate memo project: words are kept
+/// as transcribed, and names, terms and proofreading are handled there.
 nonisolated enum TranscriptFormatter {
-    /// `# Meeting 2026-09-15 14:00`, followed by `Vocabulary: …` when terms are given
-    ///
-    /// The vocabulary is not used by whisper; it tells later processing (a memo
-    /// written from the transcript) how names and terms are spelled.
-    static func header(meetingStart: Date, vocabulary: String = "", timeZone: TimeZone = .current) -> String {
-        var header = "# Meeting \(format(meetingStart, pattern: "yyyy-MM-dd HH:mm", timeZone: timeZone))\n\n"
-        let terms = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !terms.isEmpty {
-            header += "Vocabulary: \(terms)\n\n"
-        }
-        return header
+    /// `# Meeting 2026-09-15 14:00` or `# Meeting 2026-09-15 14:00 – Client Oy – steering group`
+    static func header(meetingStart: Date, title: String = "", timeZone: TimeZone = .current) -> String {
+        let stamp = format(meetingStart, pattern: "yyyy-MM-dd HH:mm", timeZone: timeZone)
+        let cleanTitle = singleLineTitle(title)
+        return cleanTitle.isEmpty ? "# Meeting \(stamp)\n\n" : "# Meeting \(stamp) – \(cleanTitle)\n\n"
     }
 
     /// `[14:02:15] Me: text`, followed by a blank line
@@ -155,14 +192,22 @@ nonisolated enum TranscriptFormatter {
     static func document(
         turns: [TranscriptTurn],
         meetingStart: Date,
-        vocabulary: String = "",
+        title: String = "",
         timeZone: TimeZone = .current
     ) -> String {
-        header(meetingStart: meetingStart, vocabulary: vocabulary, timeZone: timeZone)
+        header(meetingStart: meetingStart, title: title, timeZone: timeZone)
             + turns
                 .sorted { $0.startTime < $1.startTime }
                 .map { line(speaker: $0.speaker, startTime: $0.startTime, text: $0.text, meetingStart: meetingStart, timeZone: timeZone) }
                 .joined()
+    }
+
+    /// Title on one line with single spaces
+    static func singleLineTitle(_ title: String) -> String {
+        title.components(separatedBy: .newlines)
+            .joined(separator: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
     }
 
     /// Format a date with a fixed pattern independent of the user's locale
@@ -184,19 +229,19 @@ nonisolated final class TranscriptWriter {
     let transcriptURL: URL
     let pendingURL: URL
     let meetingStart: Date
-    /// Names and terms written to the transcript header
-    var vocabulary: String
+    /// Meeting title written to the transcript heading
+    var title: String
 
-    init(folderURL: URL, meetingStart: Date, vocabulary: String = "") throws {
+    init(folderURL: URL, meetingStart: Date, title: String = "") throws {
         self.folderURL = folderURL
         self.meetingStart = meetingStart
-        self.vocabulary = vocabulary
+        self.title = title
         transcriptURL = folderURL.appendingPathComponent(MeetingStorage.transcriptFileName)
         pendingURL = folderURL.appendingPathComponent(MeetingStorage.pendingFolderName, isDirectory: true)
 
         try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: transcriptURL.path) {
-            let header = TranscriptFormatter.header(meetingStart: meetingStart, vocabulary: vocabulary)
+            let header = TranscriptFormatter.header(meetingStart: meetingStart, title: title)
             try Data(header.utf8).write(to: transcriptURL)
         }
     }
@@ -213,9 +258,9 @@ nonisolated final class TranscriptWriter {
     /// Replace the file with merged speaker turns in chronological order
     ///
     /// Live appends are raw chunks in transcription order; the finished meeting
-    /// is rewritten as readable turns with the current vocabulary.
+    /// is rewritten as readable turns with the current title.
     func rewrite(with turns: [TranscriptTurn]) throws {
-        let document = TranscriptFormatter.document(turns: turns, meetingStart: meetingStart, vocabulary: vocabulary)
+        let document = TranscriptFormatter.document(turns: turns, meetingStart: meetingStart, title: title)
         try Data(document.utf8).write(to: transcriptURL, options: .atomic)
     }
 

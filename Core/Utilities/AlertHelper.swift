@@ -7,6 +7,7 @@
 //
 
 import AppKit
+import ApplicationServices
 
 /// Helper class for presenting user-facing alerts in a menu bar application
 ///
@@ -99,12 +100,18 @@ class AlertHelper {
     ///
     /// - Parameter message: Custom message to display
     static func showAccessibilityFallbackNotification(message: String = "Text copied to clipboard - auto-paste requires accessibility permission") {
-        // For now, we'll log to console
-        // In a future story, this could be upgraded to NSUserNotification or a subtle in-app banner
         print("ℹ️ \(message)")
 
-        // Note: NSUserNotification is deprecated in macOS 11+
-        // For production, consider using UNUserNotificationCenter or an in-app banner
-        // For this story, console logging is sufficient as it doesn't block the flow
+        // Ask macOS to show its accessibility prompt, once per launch. Without it a
+        // missing permission is invisible: after the app is re-signed, the old
+        // Accessibility entry no longer matches and every paste silently falls back
+        // to the clipboard.
+        guard !didRequestAccessibilityThisLaunch else { return }
+        didRequestAccessibilityThisLaunch = true
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
+
+    /// Whether the system accessibility prompt was already requested during this launch
+    private static var didRequestAccessibilityThisLaunch = false
 }

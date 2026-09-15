@@ -24,13 +24,27 @@ struct MeetingTranscriptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            titleSection
             recordingSection
-            vocabularySection
             transcriptSection
         }
         .padding()
         .frame(minWidth: 380, minHeight: 480)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    // MARK: - Title
+
+    private var titleSection: some View {
+        MeetingSectionBox(title: "Title") {
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("e.g. Client Oy – steering group", text: $session.title)
+                    .textFieldStyle(.roundedBorder)
+                Text("Added to the transcript heading and the folder name, so a memo project can find its meetings.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 
     // MARK: - Recording
@@ -91,20 +105,6 @@ struct MeetingTranscriptView: View {
                         .foregroundColor(session.statusIsWarning ? .orange : .secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-        }
-    }
-
-    // MARK: - Vocabulary
-
-    private var vocabularySection: some View {
-        MeetingSectionBox(title: "Vocabulary") {
-            VStack(alignment: .leading, spacing: 4) {
-                TextField("Names and terms, separated by commas", text: $session.vocabulary)
-                    .textFieldStyle(.roundedBorder)
-                Text("Written to the top of the transcript so that memo processing spells names correctly.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
         }
     }

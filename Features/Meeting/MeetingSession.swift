@@ -53,6 +53,9 @@ struct WhisperServerConfig {
 /// cuts both into speech chunks, transcribes them one at a time with the local
 /// whisper.cpp server and appends each result to `transcript.md`.
 ///
+/// The transcript is raw material for a separate memo project, where names,
+/// terms and proofreading are handled; words are kept as transcribed.
+///
 /// **Reliability:** every chunk is written to the session's `.pending` folder
 /// before transcription and deleted only after its text is in the transcript.
 /// Chunks left behind by a crash or an unavailable server are transcribed by
@@ -71,8 +74,6 @@ struct WhisperServerConfig {
 @MainActor
 final class MeetingSession: ObservableObject {
     static let shared = MeetingSession()
-
-    private static let vocabularyDefaultsKey = "meetingVocabulary"
 
     // MARK: - Published State
 
@@ -97,14 +98,13 @@ final class MeetingSession: ObservableObject {
     @Published private(set) var statusIsWarning = false
     @Published private(set) var errorMessage: String?
 
-    /// Names and terms written to the transcript header for later processing
+    /// Meeting title for the transcript heading and folder name
     ///
-    /// Remembered between meetings. Not sent to whisper: prompting the model
-    /// did not fix term spelling in tests and introduced new errors.
-    @Published var vocabulary: String {
+    /// Kept between meetings until changed. A title edited during a meeting
+    /// renames the folder when the meeting ends.
+    @Published var title = "" {
         didSet {
-            UserDefaults.standard.set(vocabulary, forKey: Self.vocabularyDefaultsKey)
-            writer?.vocabulary = vocabulary
+            writer?.title = title
         }
     }
 
@@ -142,9 +142,7 @@ final class MeetingSession: ObservableObject {
     private var meterTimer: Timer?
     private var isRecovering = false
 
-    private init() {
-        vocabulary = UserDefaults.standard.string(forKey: Self.vocabularyDefaultsKey) ?? ""
-    }
+    private init() {}
 
     // MARK: - Start and Stop
 
@@ -171,8 +169,8 @@ final class MeetingSession: ObservableObject {
 
         let start = Date()
         do {
-            let folder = try MeetingStorage.createSessionFolder(for: start)
-            writer = try TranscriptWriter(folderURL: folder, meetingStart: start, vocabulary: vocabulary)
+            let folder = try MeetingStorage.createSessionFolder(for: start, title: title)
+            writer = try TranscriptWriter(folderURL: folder, meetingStart: start, title: title)
             folderURL = folder
         } catch {
             failStart("Could not create the meeting folder: \(error.localizedDescription)")
@@ -574,6 +572,13 @@ final class MeetingSession: ObservableObject {
                 setStatus("Transcript saved (\(turns.count) turns).")
             } else {
                 setStatus("\(queue.count) chunks were not transcribed. They will be transcribed on the next launch when whisper-server responds.", warning: true)
+            }
+
+            // The title may have been typed or changed after the meeting started
+            do {
+                folderURL = try MeetingStorage.renameSessionFolder(writer.folderURL, start: writer.meetingStart, title: title)
+            } catch {
+                logger.error("Renaming the meeting folder failed: \(error.localizedDescription)")
             }
         }
 
