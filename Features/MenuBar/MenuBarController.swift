@@ -329,9 +329,10 @@ class MenuBarController: NSObject, NSApplicationDelegate {
     private func updateMenuBarIcon(for state: RecordingState) {
         guard let button = statusItem?.button else { return }
 
-        // Meeting transcription: red waveform for the whole session
+        // Meeting transcription: recording color for the whole session
         if MeetingSession.shared.isActive {
-            button.image = createWaveformIcon(color: .systemRed)
+            let limeGreen = NSColor(red: 0.196, green: 0.804, blue: 0.196, alpha: 1.0)
+            button.image = createWaveformIcon(color: limeGreen)
             button.image?.isTemplate = false
             return
         }
@@ -487,17 +488,17 @@ class MenuBarController: NSObject, NSApplicationDelegate {
 
         let title: String
         switch session.state {
-        case .idle: title = "Aloita palaveri"
-        case .starting: title = "Palaveri käynnistyy…"
-        case .running: title = "Lopeta palaveri"
-        case .stopping: title = "Litteroidaan loppuun…"
+        case .idle: title = "Start Meeting Transcription"
+        case .starting: title = "Starting Meeting…"
+        case .running: title = "Stop Meeting Transcription"
+        case .stopping: title = "Finishing Transcript…"
         }
         let toggleItem = NSMenuItem(title: title, action: #selector(toggleMeeting), keyEquivalent: "")
         toggleItem.target = self
         toggleItem.isEnabled = session.state == .idle || session.state == .running
         menu.addItem(toggleItem)
 
-        let windowItem = NSMenuItem(title: "Näytä palaverin transkripti", action: #selector(showMeetingWindow), keyEquivalent: "")
+        let windowItem = NSMenuItem(title: "Show Meeting Transcript", action: #selector(showMeetingWindow), keyEquivalent: "")
         windowItem.target = self
         menu.addItem(windowItem)
     }

@@ -30,6 +30,7 @@ Speech to Clip supports **two powerful transcription options**—pick what matte
 ## ✨ Core Features
 
 - 🎤 **Voice Recording** - Press a hotkey (default: Control+Space) to start/stop recording
+- 🎙️ **Meeting Transcription** - Live local transcript of Teams, Google Meet and Slack huddle meetings, saved to a file
 - 🌊 **Wave Visualizer** - Floating wave animation on screen edge that responds to your voice amplitude
 - ✨ **AI Proofreading** - Optional GPT-4o-mini powered spelling, punctuation, and capitalization correction
 - 🌐 **Translation Mode** - Translate speech to English from any supported language
@@ -177,6 +178,32 @@ Click the menu bar icon → **Settings** to configure:
 | `Control+Space` | Start/Stop Recording (customizable) |
 | `⌘,` | Open Settings |
 | `⌘Q` | Quit Application |
+
+## 🎙️ Meeting Transcription
+
+Transcribe Teams, Google Meet and Slack huddle meetings live with Local Whisper. Your microphone is labeled **Me** and everything the Mac plays (the other participants) **Others**.
+
+1. Make sure a Local Whisper profile exists and the whisper.cpp server is running
+2. Menu bar → **Start Meeting Transcription**
+3. Follow the transcript in the **Meeting Transcript** window
+4. Menu bar or window → **Stop Meeting Transcription**
+
+Transcripts are saved to `~/Documents/Meetings/<yyyy-MM-dd_HHmm>/transcript.md`.
+
+**How it works**
+- System audio is captured with a Core Audio process tap (macOS 14.4+). macOS asks once for permission to record system audio; screen recording permission is not needed
+- Audio is cut into speech chunks at pauses (at most 25 s) and silent chunks are skipped, so whisper does not invent text for silence
+- Whisper segments with low confidence are dropped
+- Every chunk is saved to `.pending/` before transcription; chunks left by a crash are transcribed on the next launch
+- Microphone lines that repeat the other participants (speaker echo) are dropped
+- When the meeting ends, fragments are joined into speaker turns in chronological order
+- **Vocabulary**: names and terms written to the top of the transcript for memo processing
+- **Settings → General → Meeting Transcription**: choose which Local Whisper profile meetings use
+
+**Notes**
+- The dictation hotkey is disabled during a meeting
+- Transcripts are text only; audio is not kept
+- With speakers, a one- or two-word interjection of your own that overlaps someone else may be dropped as echo
 
 ## Project Structure
 
@@ -401,6 +428,7 @@ Log levels:
 - [x] Multi-language translation support (v0.2.0)
 - [x] Offline mode with Local Whisper (v0.3.0)
 - [x] AI Proofreading with GPT-4o-mini (v0.3.2)
+- [x] Meeting transcription with Local Whisper (v0.4.0)
 
 **Potential future enhancements:**
 - [ ] Transcription history with searchable archive

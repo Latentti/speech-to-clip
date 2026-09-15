@@ -156,6 +156,50 @@ struct GeneralTab: View {
                     .font(.headline)
             }
 
+            // MARK: Meeting Transcription
+
+            Section {
+                if allProfiles.contains(where: { $0.transcriptionEngine == .localWhisper }) {
+                    Picker("Local Whisper Profile", selection: $appState.settings.meetingProfileId) {
+                        Text("Automatic").tag(nil as UUID?)
+                        ForEach(allProfiles.filter { $0.transcriptionEngine == .localWhisper }) { profile in
+                            Text(profile.name).tag(profile.id as UUID?)
+                        }
+                    }
+                    .onChange(of: appState.settings.meetingProfileId) { newValue in
+                        print("⚙️ Meeting profile changed to: \(newValue?.uuidString ?? "Automatic")")
+                        saveSettings()
+                    }
+
+                    Text("Meetings are transcribed locally. Automatic uses the active profile when it is Local Whisper, otherwise the first Local Whisper profile.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
+                } else {
+                    Text("Requires a Local Whisper profile. Add one in the Profiles tab.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.top, 2)
+                }
+
+                HStack {
+                    Text(MeetingStorage.rootURL.path)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button("Show in Finder") {
+                        let root = MeetingStorage.rootURL
+                        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                        NSWorkspace.shared.activateFileViewerSelecting([root])
+                    }
+                }
+            } header: {
+                Text("Meeting Transcription")
+                    .font(.headline)
+            }
+
             // MARK: App Behavior
 
             Section {

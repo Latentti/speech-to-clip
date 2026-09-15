@@ -27,12 +27,15 @@ struct WhisperServerConfig {
     let language: String
     let profileName: String
 
-    /// Prefer the active profile when it uses Local Whisper, otherwise the first Local Whisper profile
-    static func resolve(profileManager: ProfileManager = ProfileManager()) -> WhisperServerConfig? {
-        let active = try? profileManager.getActiveProfile()
-        let profiles = (try? profileManager.getAllProfiles()) ?? []
-        let localActive = active.flatMap { $0.transcriptionEngine == .localWhisper ? $0 : nil }
-        guard let profile = localActive ?? profiles.first(where: { $0.transcriptionEngine == .localWhisper }) else {
+    /// Choose the Local Whisper profile for meetings
+    ///
+    /// Order: the profile selected in Settings, the active profile if it uses
+    /// Local Whisper, then the first Local Whisper profile.
+    static func resolve(preferredProfileID: UUID? = nil, profileManager: ProfileManager = ProfileManager()) -> WhisperServerConfig? {
+        let localProfiles = ((try? profileManager.getAllProfiles()) ?? []).filter { $0.transcriptionEngine == .localWhisper }
+        let preferred = preferredProfileID.flatMap { id in localProfiles.first { $0.id == id } }
+        let active = (try? profileManager.getActiveProfile()).flatMap { active in localProfiles.first { $0.id == active.id } }
+        guard let profile = preferred ?? active ?? localProfiles.first else {
             return nil
         }
         return WhisperServerConfig(
@@ -46,7 +49,7 @@ struct WhisperServerConfig {
 
 /// Live transcription of a Teams, Google Meet or Slack huddle meeting
 ///
-/// Captures the microphone ("Minä") and system audio ("Muut") separately,
+/// Captures the microphone ("Me") and system audio ("Others") separately,
 /// cuts both into speech chunks, transcribes them one at a time with the local
 /// whisper.cpp server and appends each result to `transcript.md`.
 ///
@@ -62,7 +65,7 @@ struct WhisperServerConfig {
 ///
 /// **Echo:** when the meeting plays through speakers the microphone hears the
 /// other participants too. Microphone segments are held until the overlapping
-/// system audio has been transcribed and dropped if their words largely match it.
+/// system audio has been transcribed and dropped if they repeat it.
 ///
 /// Dictation is disabled while a session is active (see `HotkeyManager`).
 @MainActor
@@ -90,6 +93,8 @@ final class MeetingSession: ObservableObject {
     @Published private(set) var lastSegmentAt: Date?
     @Published private(set) var folderURL: URL?
     @Published private(set) var statusMessage: String?
+    /// Whether `statusMessage` is a warning rather than information
+    @Published private(set) var statusIsWarning = false
     @Published private(set) var errorMessage: String?
 
     /// Names and terms written to the transcript header for later processing
@@ -151,10 +156,10 @@ final class MeetingSession: ObservableObject {
         guard state == .idle else { return }
         state = .starting
         errorMessage = nil
-        statusMessage = nil
+        setStatus(nil)
 
-        guard let config = WhisperServerConfig.resolve() else {
-            failStart("Palaveritila tarvitsee Local Whisper -profiilin. Lisää se asetusten Profiles-välilehdellä.")
+        guard let config = WhisperServerConfig.resolve(preferredProfileID: AppState.shared.settings.meetingProfileId) else {
+            failStart("Meeting transcription needs a Local Whisper profile. Add one in Settings → Profiles.")
             return
         }
         self.config = config
@@ -170,7 +175,7 @@ final class MeetingSession: ObservableObject {
             writer = try TranscriptWriter(folderURL: folder, meetingStart: start, vocabulary: vocabulary)
             folderURL = folder
         } catch {
-            failStart("Palaverikansiota ei voitu luoda: \(error.localizedDescription)")
+            failStart("Could not create the meeting folder: \(error.localizedDescription)")
             return
         }
 
@@ -194,11 +199,11 @@ final class MeetingSession: ObservableObject {
             wantsMicrophone = true
             startMicrophone()
         } else {
-            statusMessage = "Mikrofonilupa puuttuu, joten vain muiden puhe tallentuu."
+            setStatus("Microphone access is missing, so only other participants are recorded.", warning: true)
         }
 
         guard isSystemAudioActive || isMicrophoneActive else {
-            let reason = statusMessage ?? "Äänen kaappaus ei käynnistynyt."
+            let reason = statusMessage ?? "Audio capture did not start."
             if let folderURL {
                 try? FileManager.default.removeItem(at: folderURL)
             }
@@ -214,7 +219,7 @@ final class MeetingSession: ObservableObject {
 
         if (try? await whisperClient.checkServerAvailability(port: config.port)) != true {
             serverWarningShown = true
-            statusMessage = "whisper-server ei vastaa portissa \(config.port). Tallennus jatkuu, ja pätkät odottavat jonossa."
+            setStatus("whisper-server is not responding on port \(config.port). Recording continues and audio waits in the queue.", warning: true)
         }
     }
 
@@ -223,7 +228,7 @@ final class MeetingSession: ObservableObject {
         guard state == .running else { return }
         state = .stopping
         endedAt = Date()
-        statusMessage = "Litteroidaan viimeiset pätkät…"
+        setStatus("Transcribing the remaining audio…")
 
         stopCaptures()
         micChunker?.flush()
@@ -243,11 +248,17 @@ final class MeetingSession: ObservableObject {
     private func failStart(_ message: String) {
         logger.error("Meeting start failed: \(message)")
         errorMessage = message
+        setStatus(nil)
         stopCaptures()
         writer = nil
         micChunker = nil
         systemChunker = nil
         state = .idle
+    }
+
+    private func setStatus(_ message: String?, warning: Bool = false) {
+        statusMessage = message
+        statusIsWarning = warning
     }
 
     // MARK: - Captures
@@ -305,12 +316,12 @@ final class MeetingSession: ObservableObject {
             )
             systemAudio = capture
             isSystemAudioActive = true
-            if statusMessage?.hasPrefix("Tietokoneen äänen") == true {
-                statusMessage = nil
+            if statusMessage?.hasPrefix("System audio capture") == true {
+                setStatus(nil)
             }
         } catch {
             isSystemAudioActive = false
-            statusMessage = "Tietokoneen äänen kaappaus ei käynnistynyt: \(error.localizedDescription)"
+            setStatus("System audio capture did not start: \(error.localizedDescription)", warning: true)
             logger.error("System audio capture failed: \(error.localizedDescription)")
         }
     }
@@ -338,12 +349,12 @@ final class MeetingSession: ObservableObject {
             )
             microphone = capture
             isMicrophoneActive = true
-            if statusMessage?.hasPrefix("Mikrofonin") == true {
-                statusMessage = nil
+            if statusMessage?.hasPrefix("Microphone capture") == true {
+                setStatus(nil)
             }
         } catch {
             isMicrophoneActive = false
-            statusMessage = "Mikrofonin kaappaus ei käynnistynyt: \(error.localizedDescription)"
+            setStatus("Microphone capture did not start: \(error.localizedDescription)", warning: true)
             logger.error("Microphone capture failed: \(error.localizedDescription)")
         }
     }
@@ -410,7 +421,7 @@ final class MeetingSession: ObservableObject {
     private func chunkWritten(_ chunk: PendingChunk, writeError: String?) {
         chunker(for: chunk.speaker)?.acknowledgeDelivery(startTime: chunk.startTime)
         if let writeError {
-            errorMessage = "Äänipätkän tallennus epäonnistui: \(writeError)"
+            errorMessage = "Saving an audio chunk failed: \(writeError)"
             logger.error("Chunk write failed: \(writeError)")
             return
         }
@@ -436,7 +447,7 @@ final class MeetingSession: ObservableObject {
                 failures = 0
                 if serverWarningShown {
                     serverWarningShown = false
-                    statusMessage = nil
+                    setStatus(nil)
                 }
                 handleTranscription(text, for: chunk)
             } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
@@ -445,7 +456,7 @@ final class MeetingSession: ObservableObject {
             } catch {
                 failures += 1
                 serverWarningShown = true
-                statusMessage = "whisper-server ei vastaa (\(error.localizedDescription)). Jonossa \(queue.count) pätkää."
+                setStatus("whisper-server is not responding (\(error.localizedDescription)). \(queue.count) chunks in the queue.", warning: true)
                 logger.error("Transcription failed (\(failures)): \(error.localizedDescription)")
                 if state == .stopping && failures >= 3 { break }
                 let delay = min(pow(2, Double(failures)), 15)
@@ -506,7 +517,7 @@ final class MeetingSession: ObservableObject {
         do {
             try writer?.append(segment)
         } catch {
-            errorMessage = "Transkriptin kirjoitus epäonnistui: \(error.localizedDescription)"
+            errorMessage = "Writing the transcript failed: \(error.localizedDescription)"
             logger.error("Transcript append failed: \(error.localizedDescription)")
         }
     }
@@ -532,7 +543,7 @@ final class MeetingSession: ObservableObject {
                 stillHeld.append(segment)
                 continue
             }
-            if EchoFilter.isEcho(segment, of: systemSegments) {
+            if EchoFilter.shouldDrop(segment, of: systemSegments) {
                 logger.info("Dropped microphone echo at \(segment.startTime) s")
             } else {
                 accept(segment)
@@ -557,12 +568,12 @@ final class MeetingSession: ObservableObject {
                 do {
                     try writer.rewrite(with: turns)
                 } catch {
-                    errorMessage = "Transkriptin viimeistely epäonnistui: \(error.localizedDescription)"
+                    errorMessage = "Finalizing the transcript failed: \(error.localizedDescription)"
                 }
                 writer.removePendingFolderIfEmpty()
-                statusMessage = "Transkripti tallennettu (\(turns.count) puheenvuoroa)."
+                setStatus("Transcript saved (\(turns.count) turns).")
             } else {
-                statusMessage = "\(queue.count) pätkää jäi litteroimatta. Ne litteroidaan seuraavalla käynnistyksellä, kun whisper-server vastaa."
+                setStatus("\(queue.count) chunks were not transcribed. They will be transcribed on the next launch when whisper-server responds.", warning: true)
             }
         }
 
@@ -586,7 +597,7 @@ final class MeetingSession: ObservableObject {
         guard state == .idle, !isRecovering else { return }
         let folders = MeetingStorage.foldersWithPendingChunks()
         guard !folders.isEmpty else { return }
-        guard let config = WhisperServerConfig.resolve() else {
+        guard let config = WhisperServerConfig.resolve(preferredProfileID: AppState.shared.settings.meetingProfileId) else {
             logger.error("Pending meeting chunks found but no Local Whisper profile")
             return
         }

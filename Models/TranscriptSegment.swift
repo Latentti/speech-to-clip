@@ -10,11 +10,11 @@ import Foundation
 
 /// Audio source of a meeting transcript line
 ///
-/// The microphone is the user ("Minä"); system audio carries every other
-/// participant ("Muut"). Individual remote speakers are not separated.
+/// The microphone is the user ("Me"); system audio carries every other
+/// participant ("Others"). Individual remote speakers are not separated.
 nonisolated enum MeetingSpeaker: String, Codable, CaseIterable {
-    case me = "Minä"
-    case others = "Muut"
+    case me = "Me"
+    case others = "Others"
 
     /// ASCII tag used in pending chunk file names
     var fileTag: String {

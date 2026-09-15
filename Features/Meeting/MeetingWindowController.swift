@@ -31,9 +31,9 @@ final class MeetingWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "Palaverin transkripti"
+        window.title = "Meeting Transcript"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 360, height: 400)
+        window.minSize = NSSize(width: 380, height: 480)
 
         let view = MeetingTranscriptView(session: .shared) { [weak window] pinned in
             window?.level = pinned ? .floating : .normal

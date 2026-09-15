@@ -76,4 +76,24 @@ nonisolated enum EchoFilter {
         let reference = overlapping.map(\.text).joined(separator: " ")
         return containment(of: micSegment.text, in: reference) >= threshold
     }
+
+    /// Longest microphone line dropped whenever other participants speak at the same time
+    static let shortLineMaximumWords = 2
+
+    /// Whether a microphone segment should be dropped from the transcript
+    ///
+    /// Adds a rule for very short lines to `isEcho`: echo fragments such as
+    /// "Kiitos." or "and" have too few words to compare, so a line of at most
+    /// `shortLineMaximumWords` words is dropped when it overlaps other
+    /// participants' speech. A short own interjection during someone else's
+    /// turn is lost as well, which matters little for a memo.
+    static func shouldDrop(_ micSegment: TranscriptSegment, of systemSegments: [TranscriptSegment]) -> Bool {
+        if isEcho(micSegment, of: systemSegments) {
+            return true
+        }
+        guard words(in: micSegment.text).count <= shortLineMaximumWords else { return false }
+        return systemSegments.contains {
+            $0.startTime <= micSegment.endTime + 1 && $0.endTime >= micSegment.startTime - 1
+        }
+    }
 }

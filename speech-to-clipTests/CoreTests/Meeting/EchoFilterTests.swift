@@ -123,6 +123,30 @@ final class EchoFilterTests: XCTestCase {
         XCTAssertFalse(EchoFilter.isEcho(speech, of: []))
     }
 
+    // MARK: - Short Lines
+
+    /// Meeting on speakers with a muted microphone: "Kiitos." and "and" slipped through word matching
+    func testShortLineOverlappingOthersIsDropped() {
+        let others = TranscriptSegment(speaker: .others, startTime: 400, endTime: 412, text: "Palataan siihen tarkemmin ensi viikolla, kiitos kaikille.")
+        let short = TranscriptSegment(speaker: .me, startTime: 405, endTime: 406, text: "and")
+
+        XCTAssertTrue(EchoFilter.shouldDrop(short, of: [others]))
+    }
+
+    func testShortLineWithoutOthersSpeakingIsKept() {
+        let others = TranscriptSegment(speaker: .others, startTime: 400, endTime: 412, text: "Palataan siihen tarkemmin ensi viikolla.")
+        let reply = TranscriptSegment(speaker: .me, startTime: 420, endTime: 421, text: "Joo, kiitos.")
+
+        XCTAssertFalse(EchoFilter.shouldDrop(reply, of: [others]))
+    }
+
+    func testLongerOwnLineOverlappingOthersIsKept() {
+        let others = TranscriptSegment(speaker: .others, startTime: 400, endTime: 412, text: "Palataan siihen tarkemmin ensi viikolla.")
+        let ownLine = TranscriptSegment(speaker: .me, startTime: 405, endTime: 409, text: "Mulla on yksi kysymys budjetista.")
+
+        XCTAssertFalse(EchoFilter.shouldDrop(ownLine, of: [others]))
+    }
+
     // MARK: - Word Matching
 
     func testWordsMatchInflectionsButNotDifferentWords() {

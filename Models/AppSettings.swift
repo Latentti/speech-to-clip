@@ -59,6 +59,10 @@ struct AppSettings: Codable {
     /// References a Profile with transcriptionEngine == .openai
     var proofreadingProfileId: UUID? = nil
 
+    /// Meeting transcription: Local Whisper profile used for meetings
+    /// If nil, the active profile is used when it is Local Whisper, otherwise the first Local Whisper profile
+    var meetingProfileId: UUID? = nil
+
     // MARK: - Codable (Story 11.5-1 - Backward Compatibility)
 
     /// Coding keys for Codable conformance
@@ -68,11 +72,12 @@ struct AppSettings: Codable {
         case activeProfileID, enableTranslation, launchAtLogin, showNotifications
         case hotkey, onboardingCompleted, tutorialCompleted, onboardingVersion
         case defaultLanguage, enableProofreading, proofreadingProfileId
+        case meetingProfileId
     }
 
     /// Custom Codable implementation for backward compatibility
     ///
-    /// Ensures old settings (without proofreading fields) decode
+    /// Ensures old settings (without proofreading or meeting fields) decode
     /// with default values (false, nil).
     ///
     /// - Note: Story 11.5-1 AC 3 - Backward compatible decoding
@@ -93,6 +98,9 @@ struct AppSettings: Codable {
         // Decode proofreading fields with defaults for backward compatibility
         enableProofreading = try container.decodeIfPresent(Bool.self, forKey: .enableProofreading) ?? false
         proofreadingProfileId = try container.decodeIfPresent(UUID.self, forKey: .proofreadingProfileId)
+
+        // Decode meeting transcription fields with defaults for backward compatibility
+        meetingProfileId = try container.decodeIfPresent(UUID.self, forKey: .meetingProfileId)
     }
 
     /// Custom encode implementation for symmetric Codable conformance
@@ -118,6 +126,9 @@ struct AppSettings: Codable {
         // Encode proofreading fields
         try container.encode(enableProofreading, forKey: .enableProofreading)
         try container.encodeIfPresent(proofreadingProfileId, forKey: .proofreadingProfileId)
+
+        // Encode meeting transcription fields
+        try container.encodeIfPresent(meetingProfileId, forKey: .meetingProfileId)
     }
 
     /// Default initializer with all default values
@@ -132,7 +143,8 @@ struct AppSettings: Codable {
         onboardingVersion: String = "1.0",
         defaultLanguage: WhisperLanguage = .english,
         enableProofreading: Bool = false,
-        proofreadingProfileId: UUID? = nil
+        proofreadingProfileId: UUID? = nil,
+        meetingProfileId: UUID? = nil
     ) {
         self.activeProfileID = activeProfileID
         self.enableTranslation = enableTranslation
@@ -145,5 +157,6 @@ struct AppSettings: Codable {
         self.defaultLanguage = defaultLanguage
         self.enableProofreading = enableProofreading
         self.proofreadingProfileId = proofreadingProfileId
+        self.meetingProfileId = meetingProfileId
     }
 }

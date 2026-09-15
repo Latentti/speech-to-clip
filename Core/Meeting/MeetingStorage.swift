@@ -19,7 +19,7 @@ nonisolated struct PendingChunk: Equatable {
 /// Locations and folder layout for meeting transcripts
 ///
 /// ```
-/// ~/Documents/Palaverit/2026-09-15_1400/
+/// ~/Documents/Meetings/2026-09-15_1400/
 ///   transcript.md     transcript, appended after every segment
 ///   session.json      meeting start time (used for crash recovery)
 ///   .pending/         WAV chunks not yet transcribed
@@ -29,9 +29,11 @@ nonisolated enum MeetingStorage {
     static let sessionFileName = "session.json"
     static let pendingFolderName = ".pending"
 
-    /// `~/Documents/Palaverit` in the real home folder (the sandbox container home is not used)
+    /// `~/Documents/Meetings` in the real home folder (the sandbox container home is not used)
+    ///
+    /// The app sandbox grants access through a home-relative exception in the entitlements.
     static var rootURL: URL {
-        realHomeDirectory().appendingPathComponent("Documents/Palaverit", isDirectory: true)
+        realHomeDirectory().appendingPathComponent("Documents/Meetings", isDirectory: true)
     }
 
     /// Create a new session folder named after the meeting start time
@@ -55,11 +57,7 @@ nonisolated enum MeetingStorage {
 
     /// Folder name such as `2026-09-15_1400`
     static func folderName(for start: Date, timeZone: TimeZone = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd_HHmm"
-        return formatter.string(from: start)
+        TranscriptFormatter.format(start, pattern: "yyyy-MM-dd_HHmm", timeZone: timeZone)
     }
 
     /// Meeting start time stored in a session folder
@@ -124,20 +122,20 @@ nonisolated enum PendingChunkName {
 
 /// Markdown formatting of the meeting transcript
 nonisolated enum TranscriptFormatter {
-    /// `# Palaveri 15.9.2026 klo 14.00`, followed by `Sanasto: …` when terms are given
+    /// `# Meeting 2026-09-15 14:00`, followed by `Vocabulary: …` when terms are given
     ///
     /// The vocabulary is not used by whisper; it tells later processing (a memo
     /// written from the transcript) how names and terms are spelled.
     static func header(meetingStart: Date, vocabulary: String = "", timeZone: TimeZone = .current) -> String {
-        var header = "# Palaveri \(format(meetingStart, pattern: "d.M.yyyy 'klo' HH.mm", timeZone: timeZone))\n\n"
+        var header = "# Meeting \(format(meetingStart, pattern: "yyyy-MM-dd HH:mm", timeZone: timeZone))\n\n"
         let terms = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
         if !terms.isEmpty {
-            header += "Sanasto: \(terms)\n\n"
+            header += "Vocabulary: \(terms)\n\n"
         }
         return header
     }
 
-    /// `[14:02:15] Minä: text`, followed by a blank line
+    /// `[14:02:15] Me: text`, followed by a blank line
     static func line(
         speaker: MeetingSpeaker,
         startTime: TimeInterval,
@@ -167,9 +165,10 @@ nonisolated enum TranscriptFormatter {
                 .joined()
     }
 
-    private static func format(_ date: Date, pattern: String, timeZone: TimeZone) -> String {
+    /// Format a date with a fixed pattern independent of the user's locale
+    static func format(_ date: Date, pattern: String, timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "fi_FI")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = timeZone
         formatter.dateFormat = pattern
         return formatter.string(from: date)

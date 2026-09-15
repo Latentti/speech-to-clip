@@ -24,6 +24,12 @@ final class MeetingStorageTests: XCTestCase {
         try? FileManager.default.removeItem(at: temporaryRoot)
     }
 
+    // MARK: - Locations
+
+    func testRootFolderIsMeetingsInDocuments() {
+        XCTAssertTrue(MeetingStorage.rootURL.path.hasSuffix("/Documents/Meetings"))
+    }
+
     // MARK: - Pending Chunk Names
 
     func testPendingChunkNameRoundTrip() throws {
@@ -57,7 +63,7 @@ final class MeetingStorageTests: XCTestCase {
 
         let line = TranscriptFormatter.line(for: segment, meetingStart: start, timeZone: utc)
 
-        XCTAssertEqual(line, "[11:02:15] Muut: Asiakas toivoo versiota lokakuussa.\n\n")
+        XCTAssertEqual(line, "[11:02:15] Others: Asiakas toivoo versiota lokakuussa.\n\n")
     }
 
     func testDocumentHasHeaderVocabularyAndChronologicalTurns() {
@@ -71,14 +77,14 @@ final class MeetingStorageTests: XCTestCase {
 
         XCTAssertEqual(
             document,
-            "# Palaveri 15.9.2026 klo 11.00\n\nSanasto: Wärtsilä, CGI\n\n[11:00:05] Muut: Ensimmäinen.\n\n[11:00:20] Minä: Toinen.\n\n"
+            "# Meeting 2026-09-15 11:00\n\nVocabulary: Wärtsilä, CGI\n\n[11:00:05] Others: Ensimmäinen.\n\n[11:00:20] Me: Toinen.\n\n"
         )
     }
 
     func testHeaderWithoutVocabulary() {
         let start = Date(timeIntervalSince1970: 1_789_470_000)
 
-        XCTAssertEqual(TranscriptFormatter.header(meetingStart: start, timeZone: utc), "# Palaveri 15.9.2026 klo 11.00\n\n")
+        XCTAssertEqual(TranscriptFormatter.header(meetingStart: start, timeZone: utc), "# Meeting 2026-09-15 11:00\n\n")
     }
 
     // MARK: - Session Folders and Writer
@@ -93,9 +99,9 @@ final class MeetingStorageTests: XCTestCase {
         let writer = try TranscriptWriter(folderURL: folder, meetingStart: start, vocabulary: "Etteplan")
         try writer.append(TranscriptSegment(speaker: .me, startTime: 1, endTime: 2, text: "Ensimmäinen rivi."))
         let contents = try String(contentsOf: writer.transcriptURL, encoding: .utf8)
-        XCTAssertTrue(contents.hasPrefix("# Palaveri"))
-        XCTAssertTrue(contents.contains("Sanasto: Etteplan"))
-        XCTAssertTrue(contents.contains("Minä: Ensimmäinen rivi."))
+        XCTAssertTrue(contents.hasPrefix("# Meeting"))
+        XCTAssertTrue(contents.contains("Vocabulary: Etteplan"))
+        XCTAssertTrue(contents.contains("Me: Ensimmäinen rivi."))
 
         XCTAssertTrue(MeetingStorage.foldersWithPendingChunks(in: temporaryRoot).isEmpty)
         try Data().write(to: writer.pendingURL.appendingPathComponent("0000001000_0000002000_me.wav"))
@@ -128,7 +134,7 @@ final class MeetingStorageTests: XCTestCase {
         let earlyRange = try XCTUnwrap(contents.range(of: "Aiempi."))
         let lateRange = try XCTUnwrap(contents.range(of: "koska tota niitten toiminta perustuu myyntiin."))
         XCTAssertLessThan(earlyRange.lowerBound, lateRange.lowerBound)
-        XCTAssertTrue(contents.contains("Sanasto: CGI"))
+        XCTAssertTrue(contents.contains("Vocabulary: CGI"))
         XCTAssertFalse(contents.contains(" -"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: writer.pendingURL.path))
     }

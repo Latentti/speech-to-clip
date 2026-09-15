@@ -20,11 +20,11 @@ nonisolated enum MeetingCaptureError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .coreAudio(let call, let status):
-            return "\(call) epäonnistui (OSStatus \(status))"
+            return "\(call) failed (OSStatus \(status))"
         case .unsupportedFormat:
-            return "Äänilaitteen formaattia ei tueta"
+            return "The audio device format is not supported"
         case .engineStartFailed(let error):
-            return "Mikrofonin käynnistys epäonnistui: \(error.localizedDescription)"
+            return "Failed to start the microphone: \(error.localizedDescription)"
         }
     }
 }
