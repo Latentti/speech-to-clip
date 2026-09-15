@@ -48,8 +48,8 @@ nonisolated final class SpeechChunker: @unchecked Sendable {
         var noiseFloorMultiplier: Float = 3
         /// Upper bound for the adaptive noise floor so long speech is never reclassified as noise
         var maximumNoiseFloor: Float = 0.015
-        /// Pause that ends a chunk
-        var silenceToSplit: TimeInterval = 0.6
+        /// Pause that ends a chunk (shorter pauses inside a thought keep the sentence in one chunk)
+        var silenceToSplit: TimeInterval = 0.9
         /// Shorter pause accepted once the chunk exceeds `softMaximumDuration`
         var shortSilenceToSplit: TimeInterval = 0.25
         var softMaximumDuration: TimeInterval = 18

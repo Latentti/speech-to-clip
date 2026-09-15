@@ -15,6 +15,10 @@ import Foundation
 /// echo when most of its words appear in system audio segments that overlap it
 /// in time. The user's own speech during someone else's turn uses different
 /// words and is kept.
+///
+/// The two channels rarely produce identical words: the echo is transcribed
+/// with other Finnish inflections and spellings ("kaks" / "kaksi",
+/// "rekordin" / "rekordlin"), so words are matched by their common beginning.
 nonisolated enum EchoFilter {
     /// Share of microphone words that must appear in overlapping system audio
     static let defaultThreshold = 0.6
@@ -28,12 +32,33 @@ nonisolated enum EchoFilter {
             .filter { !$0.isEmpty }
     }
 
+    /// Whether two words are the same word in a different form
+    ///
+    /// - Words of four or more letters match when their common beginning covers
+    ///   at least four letters and 60 % of the shorter word ("valikoin" / "valikoiset").
+    /// - Two- and three-letter words match exactly or as the start of a word at
+    ///   most two letters longer ("et" / "että", "ku" / "kun").
+    static func wordsMatch(_ first: String, _ second: String) -> Bool {
+        if first == second { return true }
+        let (short, long) = first.count <= second.count ? (first, second) : (second, first)
+        let shortCount = short.count
+
+        if shortCount < 4 {
+            return shortCount >= 2 && long.hasPrefix(short) && long.count <= shortCount + 2
+        }
+        let commonPrefix = zip(short, long).prefix { $0 == $1 }.count
+        let required = max(4, Int((Double(shortCount) * 0.6).rounded(.up)))
+        return commonPrefix >= required
+    }
+
     /// Fraction of words in `candidate` that also occur in `reference` (0...1)
     static func containment(of candidate: String, in reference: String) -> Double {
         let candidateWords = words(in: candidate)
         guard !candidateWords.isEmpty else { return 0 }
         let referenceWords = Set(words(in: reference))
-        let matches = candidateWords.filter { referenceWords.contains($0) }.count
+        let matches = candidateWords.filter { word in
+            referenceWords.contains(word) || referenceWords.contains { wordsMatch(word, $0) }
+        }.count
         return Double(matches) / Double(candidateWords.count)
     }
 

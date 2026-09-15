@@ -53,7 +53,8 @@ final class SpeechChunkerTests: XCTestCase {
         let collector = Collector()
         let chunker = SpeechChunker(speaker: .others) { collector.add($0) }
 
-        feed(silence(1) + tone(2) + silence(1) + tone(2) + silence(1), to: chunker)
+        // The pause must exceed the 0.9 s split threshold plus the 0.3 s pre-roll of the next chunk
+        feed(silence(1) + tone(2) + silence(1.5) + tone(2) + silence(1.5), to: chunker)
         chunker.flush()
 
         let chunks = collector.chunks
@@ -61,8 +62,8 @@ final class SpeechChunkerTests: XCTestCase {
         guard chunks.count == 2 else { return }
         XCTAssertEqual(chunks[0].startTime, 0.7, accuracy: 0.05)
         XCTAssertEqual(chunks[0].endTime, 3.3, accuracy: 0.1)
-        XCTAssertEqual(chunks[1].startTime, 3.7, accuracy: 0.05)
-        XCTAssertEqual(chunks[1].endTime, 6.3, accuracy: 0.1)
+        XCTAssertEqual(chunks[1].startTime, 4.2, accuracy: 0.05)
+        XCTAssertEqual(chunks[1].endTime, 6.8, accuracy: 0.1)
         XCTAssertTrue(chunks.allSatisfy { $0.speaker == .others })
         XCTAssertEqual(Double(chunks[0].samples.count) / sampleRate, chunks[0].endTime - chunks[0].startTime, accuracy: 0.001)
     }

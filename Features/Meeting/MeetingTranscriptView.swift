@@ -10,9 +10,9 @@ import SwiftUI
 
 /// Live view of a meeting transcript
 ///
-/// Shows the growing transcript together with the signals that let the user
-/// trust the capture: level meters for both sources, the queue length and how
-/// long ago the latest text arrived.
+/// Shows the growing transcript as speaker turns together with the signals
+/// that let the user trust the capture: level meters for both sources, the
+/// queue length and how long ago the latest text arrived.
 struct MeetingTranscriptView: View {
     @ObservedObject var session: MeetingSession
     /// Called when "keep on top" is toggled
@@ -69,6 +69,11 @@ struct MeetingTranscriptView: View {
                 isStalled: session.systemAudioStalled
             )
 
+            TextField("Sanasto: nimet ja termit pilkuilla eroteltuina", text: $session.vocabulary)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+                .help("Kirjoitetaan transkriptin alkuun muistion koostamista varten, esim. Wärtsilä, CGI, Etteplan")
+
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(progressText(at: context.date))
                     .font(.caption)
@@ -97,22 +102,22 @@ struct MeetingTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    if session.segments.isEmpty {
+                    if session.turns.isEmpty {
                         Text(emptyText)
                             .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
                     }
-                    ForEach(session.segments) { segment in
-                        SegmentRow(segment: segment, meetingStart: session.startedAt ?? Date())
-                            .id(segment.id)
+                    ForEach(session.turns) { turn in
+                        TurnRow(turn: turn, meetingStart: session.startedAt ?? Date())
+                            .id(turn.id)
                     }
                 }
                 .padding(12)
                 .textSelection(.enabled)
             }
             .onChange(of: session.segments.count) { _, _ in
-                guard autoScroll, let last = session.segments.last else { return }
+                guard autoScroll, let last = session.turns.last else { return }
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(last.id, anchor: .bottom)
                 }
@@ -262,10 +267,10 @@ private struct LevelMeterRow: View {
     }
 }
 
-// MARK: - Segment Row
+// MARK: - Turn Row
 
-private struct SegmentRow: View {
-    let segment: TranscriptSegment
+private struct TurnRow: View {
+    let turn: TranscriptTurn
     let meetingStart: Date
 
     var body: some View {
@@ -274,11 +279,11 @@ private struct SegmentRow: View {
                 Text(timeText)
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
-                Text(segment.speaker.rawValue)
+                Text(turn.speaker.rawValue)
                     .font(.caption.bold())
-                    .foregroundColor(segment.speaker.color)
+                    .foregroundColor(turn.speaker.color)
             }
-            Text(segment.text)
+            Text(turn.text)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -287,6 +292,6 @@ private struct SegmentRow: View {
     private var timeText: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: meetingStart.addingTimeInterval(segment.startTime))
+        return formatter.string(from: meetingStart.addingTimeInterval(turn.startTime))
     }
 }

@@ -271,6 +271,33 @@ final class WhisperCppClientTests: XCTestCase {
         XCTAssertEqual(result, "Selvä, sovitaan näin. Ja sisältö on laajentunut. Kiitos.")
     }
 
+    /// Test that verbose_json segments are decoded with their confidence values
+    func testTranscribeSegmentsDecodesVerboseResponse() async throws {
+        // Arrange: Mock verbose_json response with a real and an invented segment
+        let url = URL(string: "http://localhost:8080/inference")!
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let json = """
+        {"task":"transcribe","language":"fi","duration":4.0,"text":"x","segments":[\
+        {"id":0,"text":" Selvä, sovitaan näin.","start":0.0,"end":2.5,"avg_logprob":-0.142,"no_speech_prob":0.0},\
+        {"id":1,"text":" Arvoisa herra puhemies.","start":2.5,"end":4.0,"avg_logprob":-1.894,"no_speech_prob":0.0}]}
+        """
+        MockURLProtocol.mockResponse = (json.data(using: .utf8)!, response, nil)
+
+        // Act
+        let segments = try await client.transcribeSegments(
+            audioData: Data("test audio".utf8),
+            model: "base",
+            port: 8080,
+            language: "fi"
+        )
+
+        // Assert
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments.first?.text, " Selvä, sovitaan näin.")
+        XCTAssertEqual(segments.first?.avgLogprob ?? 0, -0.142, accuracy: 0.0001)
+        XCTAssertEqual(segments.last?.end ?? 0, 4.0, accuracy: 0.0001)
+    }
+
     /// Test transcription failure with HTTP 400 (AC6: invalid response)
     func testTranscriptionFailure_HTTP400() async throws {
         // Arrange: Mock HTTP 400 (Bad Request)

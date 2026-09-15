@@ -124,23 +124,46 @@ nonisolated enum PendingChunkName {
 
 /// Markdown formatting of the meeting transcript
 nonisolated enum TranscriptFormatter {
-    /// `# Palaveri 15.9.2026 klo 14.00`
-    static func header(meetingStart: Date, timeZone: TimeZone = .current) -> String {
-        "# Palaveri \(format(meetingStart, pattern: "d.M.yyyy 'klo' HH.mm", timeZone: timeZone))\n\n"
+    /// `# Palaveri 15.9.2026 klo 14.00`, followed by `Sanasto: …` when terms are given
+    ///
+    /// The vocabulary is not used by whisper; it tells later processing (a memo
+    /// written from the transcript) how names and terms are spelled.
+    static func header(meetingStart: Date, vocabulary: String = "", timeZone: TimeZone = .current) -> String {
+        var header = "# Palaveri \(format(meetingStart, pattern: "d.M.yyyy 'klo' HH.mm", timeZone: timeZone))\n\n"
+        let terms = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !terms.isEmpty {
+            header += "Sanasto: \(terms)\n\n"
+        }
+        return header
     }
 
     /// `[14:02:15] Minä: text`, followed by a blank line
-    static func line(for segment: TranscriptSegment, meetingStart: Date, timeZone: TimeZone = .current) -> String {
-        let time = format(meetingStart.addingTimeInterval(segment.startTime), pattern: "HH:mm:ss", timeZone: timeZone)
-        return "[\(time)] \(segment.speaker.rawValue): \(segment.text)\n\n"
+    static func line(
+        speaker: MeetingSpeaker,
+        startTime: TimeInterval,
+        text: String,
+        meetingStart: Date,
+        timeZone: TimeZone = .current
+    ) -> String {
+        let time = format(meetingStart.addingTimeInterval(startTime), pattern: "HH:mm:ss", timeZone: timeZone)
+        return "[\(time)] \(speaker.rawValue): \(text)\n\n"
     }
 
-    /// Complete transcript with segments in chronological order
-    static func document(segments: [TranscriptSegment], meetingStart: Date, timeZone: TimeZone = .current) -> String {
-        header(meetingStart: meetingStart, timeZone: timeZone)
-            + segments
+    static func line(for segment: TranscriptSegment, meetingStart: Date, timeZone: TimeZone = .current) -> String {
+        line(speaker: segment.speaker, startTime: segment.startTime, text: segment.text, meetingStart: meetingStart, timeZone: timeZone)
+    }
+
+    /// Complete transcript with speaker turns in chronological order
+    static func document(
+        turns: [TranscriptTurn],
+        meetingStart: Date,
+        vocabulary: String = "",
+        timeZone: TimeZone = .current
+    ) -> String {
+        header(meetingStart: meetingStart, vocabulary: vocabulary, timeZone: timeZone)
+            + turns
                 .sorted { $0.startTime < $1.startTime }
-                .map { line(for: $0, meetingStart: meetingStart, timeZone: timeZone) }
+                .map { line(speaker: $0.speaker, startTime: $0.startTime, text: $0.text, meetingStart: meetingStart, timeZone: timeZone) }
                 .joined()
     }
 
@@ -162,16 +185,20 @@ nonisolated final class TranscriptWriter {
     let transcriptURL: URL
     let pendingURL: URL
     let meetingStart: Date
+    /// Names and terms written to the transcript header
+    var vocabulary: String
 
-    init(folderURL: URL, meetingStart: Date) throws {
+    init(folderURL: URL, meetingStart: Date, vocabulary: String = "") throws {
         self.folderURL = folderURL
         self.meetingStart = meetingStart
+        self.vocabulary = vocabulary
         transcriptURL = folderURL.appendingPathComponent(MeetingStorage.transcriptFileName)
         pendingURL = folderURL.appendingPathComponent(MeetingStorage.pendingFolderName, isDirectory: true)
 
         try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: transcriptURL.path) {
-            try Data(TranscriptFormatter.header(meetingStart: meetingStart).utf8).write(to: transcriptURL)
+            let header = TranscriptFormatter.header(meetingStart: meetingStart, vocabulary: vocabulary)
+            try Data(header.utf8).write(to: transcriptURL)
         }
     }
 
@@ -184,12 +211,12 @@ nonisolated final class TranscriptWriter {
         try handle.synchronize()
     }
 
-    /// Replace the file with all segments in chronological order
+    /// Replace the file with merged speaker turns in chronological order
     ///
-    /// Live appends follow transcription order, which can differ slightly between
-    /// the two sources; the finished meeting is rewritten sorted.
-    func rewrite(with segments: [TranscriptSegment]) throws {
-        let document = TranscriptFormatter.document(segments: segments, meetingStart: meetingStart)
+    /// Live appends are raw chunks in transcription order; the finished meeting
+    /// is rewritten as readable turns with the current vocabulary.
+    func rewrite(with turns: [TranscriptTurn]) throws {
+        let document = TranscriptFormatter.document(turns: turns, meetingStart: meetingStart, vocabulary: vocabulary)
         try Data(document.utf8).write(to: transcriptURL, options: .atomic)
     }
 

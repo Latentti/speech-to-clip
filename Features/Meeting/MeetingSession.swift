@@ -44,7 +44,7 @@ struct WhisperServerConfig {
     }
 }
 
-/// Live transcription of a Teams or Google Meet meeting
+/// Live transcription of a Teams, Google Meet or Slack huddle meeting
 ///
 /// Captures the microphone ("Minä") and system audio ("Muut") separately,
 /// cuts both into speech chunks, transcribes them one at a time with the local
@@ -56,6 +56,10 @@ struct WhisperServerConfig {
 /// `recoverPendingChunks()` on the next launch. Captures that stop delivering
 /// audio are restarted automatically.
 ///
+/// **Quality:** whisper segments with low confidence (text invented for silence
+/// or noise) are dropped. Fragmented segments are joined into speaker turns for
+/// the window and for the final transcript; the live file keeps the raw chunks.
+///
 /// **Echo:** when the meeting plays through speakers the microphone hears the
 /// other participants too. Microphone segments are held until the overlapping
 /// system audio has been transcribed and dropped if their words largely match it.
@@ -65,11 +69,15 @@ struct WhisperServerConfig {
 final class MeetingSession: ObservableObject {
     static let shared = MeetingSession()
 
+    private static let vocabularyDefaultsKey = "meetingVocabulary"
+
     // MARK: - Published State
 
     @Published private(set) var state: MeetingState = .idle
-    /// Accepted segments in chronological order
+    /// Accepted raw segments in chronological order
     @Published private(set) var segments: [TranscriptSegment] = []
+    /// Segments joined into readable speaker turns
+    @Published private(set) var turns: [TranscriptTurn] = []
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var systemLevel: Float = 0
     @Published private(set) var isMicrophoneActive = false
@@ -83,6 +91,17 @@ final class MeetingSession: ObservableObject {
     @Published private(set) var folderURL: URL?
     @Published private(set) var statusMessage: String?
     @Published private(set) var errorMessage: String?
+
+    /// Names and terms written to the transcript header for later processing
+    ///
+    /// Remembered between meetings. Not sent to whisper: prompting the model
+    /// did not fix term spelling in tests and introduced new errors.
+    @Published var vocabulary: String {
+        didSet {
+            UserDefaults.standard.set(vocabulary, forKey: Self.vocabularyDefaultsKey)
+            writer?.vocabulary = vocabulary
+        }
+    }
 
     var isActive: Bool { state != .idle }
 
@@ -118,7 +137,9 @@ final class MeetingSession: ObservableObject {
     private var meterTimer: Timer?
     private var isRecovering = false
 
-    private init() {}
+    private init() {
+        vocabulary = UserDefaults.standard.string(forKey: Self.vocabularyDefaultsKey) ?? ""
+    }
 
     // MARK: - Start and Stop
 
@@ -146,7 +167,7 @@ final class MeetingSession: ObservableObject {
         let start = Date()
         do {
             let folder = try MeetingStorage.createSessionFolder(for: start)
-            writer = try TranscriptWriter(folderURL: folder, meetingStart: start)
+            writer = try TranscriptWriter(folderURL: folder, meetingStart: start, vocabulary: vocabulary)
             folderURL = folder
         } catch {
             failStart("Palaverikansiota ei voitu luoda: \(error.localizedDescription)")
@@ -154,6 +175,7 @@ final class MeetingSession: ObservableObject {
         }
 
         segments = []
+        turns = []
         heldMicSegments = []
         queue = []
         pendingCount = 0
@@ -409,14 +431,7 @@ final class MeetingSession: ObservableObject {
             }
 
             do {
-                let audio = try Data(contentsOf: chunk.fileURL)
-                let text = try await whisperClient.transcribe(
-                    audioData: audio,
-                    model: config.model,
-                    port: config.port,
-                    language: config.language,
-                    translate: false
-                )
+                let text = try await transcribe(chunk.fileURL, config: config)
                 removeFromQueue(chunk, deleteFile: true)
                 failures = 0
                 if serverWarningShown {
@@ -438,6 +453,23 @@ final class MeetingSession: ObservableObject {
             }
         }
         finishStopping()
+    }
+
+    /// Transcribe one chunk file, keeping only confident segments
+    private func transcribe(_ fileURL: URL, config: WhisperServerConfig) async throws -> String {
+        let audio = try Data(contentsOf: fileURL)
+        let whisperSegments = try await whisperClient.transcribeSegments(
+            audioData: audio,
+            model: config.model,
+            port: config.port,
+            language: config.language,
+            translate: false
+        )
+        let dropped = whisperSegments.count - WhisperSegmentFilter.acceptedSegments(whisperSegments).count
+        if dropped > 0 {
+            logger.info("Dropped \(dropped) low-confidence segment(s) in \(fileURL.lastPathComponent)")
+        }
+        return WhisperSegmentFilter.acceptedText(from: whisperSegments)
     }
 
     private func removeFromQueue(_ chunk: PendingChunk, deleteFile: Bool) {
@@ -469,6 +501,7 @@ final class MeetingSession: ObservableObject {
     private func accept(_ segment: TranscriptSegment) {
         let index = segments.firstIndex { $0.startTime > segment.startTime } ?? segments.endIndex
         segments.insert(segment, at: index)
+        turns = TranscriptMerger.merge(segments)
         lastSegmentAt = Date()
         do {
             try writer?.append(segment)
@@ -522,18 +555,18 @@ final class MeetingSession: ObservableObject {
         if let writer {
             if queue.isEmpty {
                 do {
-                    try writer.rewrite(with: segments)
+                    try writer.rewrite(with: turns)
                 } catch {
                     errorMessage = "Transkriptin viimeistely epäonnistui: \(error.localizedDescription)"
                 }
                 writer.removePendingFolderIfEmpty()
-                statusMessage = "Transkripti tallennettu (\(segments.count) riviä)."
+                statusMessage = "Transkripti tallennettu (\(turns.count) puheenvuoroa)."
             } else {
                 statusMessage = "\(queue.count) pätkää jäi litteroimatta. Ne litteroidaan seuraavalla käynnistyksellä, kun whisper-server vastaa."
             }
         }
 
-        logger.info("Meeting finished with \(self.segments.count) segments, \(self.queue.count) pending")
+        logger.info("Meeting finished with \(self.segments.count) segments, \(self.turns.count) turns, \(self.queue.count) pending")
         writer = nil
         micChunker = nil
         systemChunker = nil
@@ -568,21 +601,13 @@ final class MeetingSession: ObservableObject {
                 for file in writer.pendingChunkFiles() {
                     guard let info = PendingChunkName.parse(file.lastPathComponent) else { continue }
                     do {
-                        let audio = try Data(contentsOf: file)
-                        let text = try await whisperClient.transcribe(
-                            audioData: audio,
-                            model: config.model,
-                            port: config.port,
-                            language: config.language,
-                            translate: false
-                        )
-                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
+                        let text = try await transcribe(file, config: config)
+                        if !text.isEmpty {
                             try writer.append(TranscriptSegment(
                                 speaker: info.speaker,
                                 startTime: info.startTime,
                                 endTime: info.endTime,
-                                text: trimmed
+                                text: text
                             ))
                         }
                         try? FileManager.default.removeItem(at: file)

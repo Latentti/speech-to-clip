@@ -60,19 +60,25 @@ final class MeetingStorageTests: XCTestCase {
         XCTAssertEqual(line, "[11:02:15] Muut: Asiakas toivoo versiota lokakuussa.\n\n")
     }
 
-    func testDocumentHasHeaderAndChronologicalLines() {
+    func testDocumentHasHeaderVocabularyAndChronologicalTurns() {
         let start = Date(timeIntervalSince1970: 1_789_470_000)
-        let segments = [
+        let turns = TranscriptMerger.merge([
             TranscriptSegment(speaker: .me, startTime: 20, endTime: 25, text: "Toinen."),
             TranscriptSegment(speaker: .others, startTime: 5, endTime: 10, text: "Ensimmäinen."),
-        ]
+        ])
 
-        let document = TranscriptFormatter.document(segments: segments, meetingStart: start, timeZone: utc)
+        let document = TranscriptFormatter.document(turns: turns, meetingStart: start, vocabulary: " Wärtsilä, CGI ", timeZone: utc)
 
         XCTAssertEqual(
             document,
-            "# Palaveri 15.9.2026 klo 11.00\n\n[11:00:05] Muut: Ensimmäinen.\n\n[11:00:20] Minä: Toinen.\n\n"
+            "# Palaveri 15.9.2026 klo 11.00\n\nSanasto: Wärtsilä, CGI\n\n[11:00:05] Muut: Ensimmäinen.\n\n[11:00:20] Minä: Toinen.\n\n"
         )
+    }
+
+    func testHeaderWithoutVocabulary() {
+        let start = Date(timeIntervalSince1970: 1_789_470_000)
+
+        XCTAssertEqual(TranscriptFormatter.header(meetingStart: start, timeZone: utc), "# Palaveri 15.9.2026 klo 11.00\n\n")
     }
 
     // MARK: - Session Folders and Writer
@@ -84,10 +90,11 @@ final class MeetingStorageTests: XCTestCase {
         XCTAssertEqual(folder.lastPathComponent, "2026-09-15_1100")
         XCTAssertEqual(MeetingStorage.sessionStart(in: folder)?.timeIntervalSince1970 ?? 0, start.timeIntervalSince1970, accuracy: 1)
 
-        let writer = try TranscriptWriter(folderURL: folder, meetingStart: start)
+        let writer = try TranscriptWriter(folderURL: folder, meetingStart: start, vocabulary: "Etteplan")
         try writer.append(TranscriptSegment(speaker: .me, startTime: 1, endTime: 2, text: "Ensimmäinen rivi."))
         let contents = try String(contentsOf: writer.transcriptURL, encoding: .utf8)
         XCTAssertTrue(contents.hasPrefix("# Palaveri"))
+        XCTAssertTrue(contents.contains("Sanasto: Etteplan"))
         XCTAssertTrue(contents.contains("Minä: Ensimmäinen rivi."))
 
         XCTAssertTrue(MeetingStorage.foldersWithPendingChunks(in: temporaryRoot).isEmpty)
@@ -100,22 +107,29 @@ final class MeetingStorageTests: XCTestCase {
         XCTAssertEqual(second.lastPathComponent, "2026-09-15_1100-2")
     }
 
-    func testRewriteSortsAndRemovesEmptyPendingFolder() throws {
+    func testRewriteWritesTurnsAndRemovesEmptyPendingFolder() throws {
         let start = Date(timeIntervalSince1970: 1_789_470_000)
         let folder = try MeetingStorage.createSessionFolder(for: start, in: temporaryRoot, timeZone: utc)
         let writer = try TranscriptWriter(folderURL: folder, meetingStart: start)
 
-        let late = TranscriptSegment(speaker: .me, startTime: 30, endTime: 35, text: "Myöhempi.")
-        let early = TranscriptSegment(speaker: .others, startTime: 10, endTime: 15, text: "Aiempi.")
-        try writer.append(late)
-        try writer.append(early)
-        try writer.rewrite(with: [late, early])
+        let fragments = [
+            TranscriptSegment(speaker: .me, startTime: 30, endTime: 32, text: "koska tota, -"),
+            TranscriptSegment(speaker: .me, startTime: 32.5, endTime: 36, text: "niitten toiminta perustuu myyntiin."),
+            TranscriptSegment(speaker: .others, startTime: 10, endTime: 15, text: "Aiempi."),
+        ]
+        for fragment in fragments {
+            try writer.append(fragment)
+        }
+        writer.vocabulary = "CGI"
+        try writer.rewrite(with: TranscriptMerger.merge(fragments))
         writer.removePendingFolderIfEmpty()
 
         let contents = try String(contentsOf: writer.transcriptURL, encoding: .utf8)
         let earlyRange = try XCTUnwrap(contents.range(of: "Aiempi."))
-        let lateRange = try XCTUnwrap(contents.range(of: "Myöhempi."))
+        let lateRange = try XCTUnwrap(contents.range(of: "koska tota niitten toiminta perustuu myyntiin."))
         XCTAssertLessThan(earlyRange.lowerBound, lateRange.lowerBound)
+        XCTAssertTrue(contents.contains("Sanasto: CGI"))
+        XCTAssertFalse(contents.contains(" -"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: writer.pendingURL.path))
     }
 

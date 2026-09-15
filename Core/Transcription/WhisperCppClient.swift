@@ -12,8 +12,32 @@ import os.log
 /// WhisperResponse represents the JSON response from whisper.cpp server
 ///
 /// Response format matches OpenAI API specification: {"text": "transcribed text"}
-private struct WhisperResponse: Codable, Sendable {
+nonisolated private struct WhisperResponse: Codable, Sendable {
     let text: String
+}
+
+/// One segment of a whisper.cpp `verbose_json` response
+///
+/// `avgLogprob` is the mean token log probability of the segment. Text that
+/// whisper invents for silence or noise scores far lower than real speech,
+/// which `WhisperSegmentFilter` uses to drop hallucinations.
+nonisolated struct WhisperSegment: Decodable, Equatable, Sendable {
+    /// Seconds from the start of the submitted audio
+    let start: Double
+    /// Seconds from the start of the submitted audio
+    let end: Double
+    let text: String
+    let avgLogprob: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case start, end, text
+        case avgLogprob = "avg_logprob"
+    }
+}
+
+/// `verbose_json` response from whisper.cpp server
+nonisolated private struct VerboseWhisperResponse: Decodable, Sendable {
+    let segments: [WhisperSegment]
 }
 
 /// WhisperCppClient provides async access to local whisper.cpp server
@@ -144,6 +168,7 @@ actor WhisperCppClient {
     /// - File part: name="file", filename="audio.wav", Content-Type: audio/wav
     /// - Model part: name="model", value=model name
     /// - Language part: name="language", value=language code
+    /// - Response format part: name="response_format", value="json" or "verbose_json"
     /// - CRLF line endings (\r\n) throughout as per HTTP multipart spec
     /// - Boundary markers: --{boundary} and --{boundary}-- for final
     ///
@@ -155,25 +180,15 @@ actor WhisperCppClient {
     ///   - model: Whisper model name (e.g., "base", "medium", "large")
     ///   - language: Language code (e.g., "en", "fi")
     ///   - translate: If true, translate output to English
+    ///   - responseFormat: whisper.cpp response format
     ///   - boundary: Unique boundary string (typically UUID().uuidString)
     /// - Returns: Complete multipart form-data body ready for HTTP POST
-    ///
-    /// Example:
-    /// ```swift
-    /// let boundary = UUID().uuidString
-    /// let body = createMultipartBody(
-    ///     audioData: wavData,
-    ///     model: "base",
-    ///     language: "en",
-    ///     translate: false,
-    ///     boundary: boundary
-    /// )
-    /// ```
     private func createMultipartBody(
         audioData: Data,
         model: String,
         language: String,
         translate: Bool,
+        responseFormat: String,
         boundary: String
     ) -> Data {
         var body = Data()
@@ -197,6 +212,11 @@ actor WhisperCppClient {
         body.append("--\(boundary)\r\n")
         body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
         body.append("\(language)\r\n")
+
+        // Response format part
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n")
+        body.append("\(responseFormat)\r\n")
 
         // Segmentation parts
         // whisper-server defaults to 60-character segments split on tokens, which
@@ -269,6 +289,76 @@ actor WhisperCppClient {
         language: String,
         translate: Bool = false
     ) async throws -> String {
+        let data = try await sendInference(
+            audioData: audioData,
+            model: model,
+            port: port,
+            language: language,
+            translate: translate,
+            responseFormat: "json"
+        )
+
+        // Decode JSON response
+        let result: WhisperResponse
+        do {
+            result = try JSONDecoder().decode(WhisperResponse.self, from: data)
+        } catch {
+            logger.error("Failed to decode response JSON: \(error.localizedDescription)")
+            if let responseString = String(data: data, encoding: .utf8) {
+                logger.debug("Response content: \(responseString)")
+            }
+            throw WhisperCppError.invalidResponse
+        }
+
+        // The server separates segments with newlines; join them into one line of text
+        let text = WhisperTextNormalizer.normalize(result.text)
+        logger.info("Transcription successful (length: \(text.count) characters)")
+        return text
+    }
+
+    /// Transcribe audio and return whisper's segments with confidence values
+    ///
+    /// Uses the `verbose_json` response format. Meeting transcription uses the
+    /// segment confidence to drop text whisper invented for silence or noise.
+    ///
+    /// - Parameters: Same as `transcribe(audioData:model:port:language:translate:)`
+    /// - Returns: Segments in audio order; texts are not normalized
+    /// - Throws: The same `WhisperCppError` cases as `transcribe`
+    func transcribeSegments(
+        audioData: Data,
+        model: String,
+        port: Int,
+        language: String,
+        translate: Bool = false
+    ) async throws -> [WhisperSegment] {
+        let data = try await sendInference(
+            audioData: audioData,
+            model: model,
+            port: port,
+            language: language,
+            translate: translate,
+            responseFormat: "verbose_json"
+        )
+
+        do {
+            let result = try JSONDecoder().decode(VerboseWhisperResponse.self, from: data)
+            logger.info("Transcription successful (\(result.segments.count) segments)")
+            return result.segments
+        } catch {
+            logger.error("Failed to decode verbose response JSON: \(error.localizedDescription)")
+            throw WhisperCppError.invalidResponse
+        }
+    }
+
+    /// Send an inference request and return the validated response body
+    private func sendInference(
+        audioData: Data,
+        model: String,
+        port: Int,
+        language: String,
+        translate: Bool,
+        responseFormat: String
+    ) async throws -> Data {
         // Construct localhost-only URL
         // Privacy guarantee: Only localhost or 127.0.0.1 are used
         let url = URL(string: "http://localhost:\(port)/inference")!
@@ -287,6 +377,7 @@ actor WhisperCppClient {
             model: model,
             language: language,
             translate: translate,
+            responseFormat: responseFormat,
             boundary: boundary
         )
 
@@ -316,21 +407,6 @@ actor WhisperCppClient {
             throw WhisperCppError.transcriptionFailed(statusCode: httpResponse.statusCode)
         }
 
-        // Decode JSON response
-        let result: WhisperResponse
-        do {
-            result = try JSONDecoder().decode(WhisperResponse.self, from: data)
-        } catch {
-            logger.error("Failed to decode response JSON: \(error.localizedDescription)")
-            if let responseString = String(data: data, encoding: .utf8) {
-                logger.debug("Response content: \(responseString)")
-            }
-            throw WhisperCppError.invalidResponse
-        }
-
-        // The server separates segments with newlines; join them into one line of text
-        let text = WhisperTextNormalizer.normalize(result.text)
-        logger.info("Transcription successful (length: \(text.count) characters)")
-        return text
+        return data
     }
 }
