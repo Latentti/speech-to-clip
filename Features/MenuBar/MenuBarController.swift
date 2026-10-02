@@ -488,7 +488,8 @@ class MenuBarController: NSObject, NSApplicationDelegate {
 
         let title: String
         switch session.state {
-        case .idle: title = "Start Meeting Transcription"
+        // Opens the window only; the user types a title and presses Start there
+        case .idle: title = "New Meeting Transcript…"
         case .starting: title = "Starting Meeting…"
         case .running: title = "Stop Meeting Transcription"
         case .stopping: title = "Finishing Transcript…"
@@ -507,8 +508,9 @@ class MenuBarController: NSObject, NSApplicationDelegate {
         let session = MeetingSession.shared
         switch session.state {
         case .idle:
+            // Do not start recording here: the user names the meeting first
+            session.prepareForNewMeeting()
             meetingWindowController.show()
-            Task { await session.start() }
         case .running:
             session.stop()
         case .starting, .stopping:

@@ -21,6 +21,7 @@ struct MeetingTranscriptView: View {
 
     @State private var autoScroll = true
     @State private var pinned = false
+    @FocusState private var titleFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -40,11 +41,29 @@ struct MeetingTranscriptView: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextField("e.g. Client Oy – steering group", text: $session.title)
                     .textFieldStyle(.roundedBorder)
-                Text("Added to the transcript heading and the folder name, so a memo project can find its meetings.")
+                    .focused($titleFocused)
+                    .disabled(session.state == .stopping)
+                    .onSubmit {
+                        if session.state == .idle {
+                            Task { await session.start() }
+                        }
+                    }
+                Text(session.state == .idle
+                     ? "Name the meeting, then press Start. The title is used for the transcript heading and the folder name."
+                     : "Added to the transcript heading and the folder name, so a memo project can find its meetings.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        // Focus the title when the window opens or when the menu asks for a new meeting
+        .onAppear { focusTitleIfIdle() }
+        .onChange(of: session.newMeetingToken) { _, _ in focusTitleIfIdle() }
+        .onChange(of: session.state) { _, _ in focusTitleIfIdle() }
+    }
+
+    private func focusTitleIfIdle() {
+        titleFocused = session.state == .idle
     }
 
     // MARK: - Recording

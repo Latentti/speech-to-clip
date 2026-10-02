@@ -100,13 +100,20 @@ final class MeetingSession: ObservableObject {
 
     /// Meeting title for the transcript heading and folder name
     ///
-    /// Kept between meetings until changed. A title edited during a meeting
-    /// renames the folder when the meeting ends.
+    /// Cleared when a meeting ends so the next meeting never inherits the
+    /// previous name. A title edited during a meeting renames the folder when
+    /// the meeting ends.
     @Published var title = "" {
         didSet {
             writer?.title = title
         }
     }
+
+    /// Incremented when the user asks to prepare a new meeting
+    ///
+    /// The transcript window observes this to move keyboard focus to the title
+    /// field, so a title can be typed before recording starts.
+    @Published private(set) var newMeetingToken = 0
 
     var isActive: Bool { state != .idle }
 
@@ -145,6 +152,15 @@ final class MeetingSession: ObservableObject {
     private init() {}
 
     // MARK: - Start and Stop
+
+    /// Clear the title for a new meeting and ask the window to focus it
+    ///
+    /// Recording is not started: the user types a title and presses Start.
+    func prepareForNewMeeting() {
+        guard state == .idle else { return }
+        title = ""
+        newMeetingToken += 1
+    }
 
     /// Start a meeting session
     ///
@@ -583,6 +599,9 @@ final class MeetingSession: ObservableObject {
         }
 
         logger.info("Meeting finished with \(self.segments.count) segments, \(self.turns.count) turns, \(self.queue.count) pending")
+        // Clear the title after the folder has been renamed, so that the next
+        // meeting starts without the previous name
+        title = ""
         writer = nil
         micChunker = nil
         systemChunker = nil
