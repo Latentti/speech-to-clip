@@ -8,6 +8,7 @@
 
 import Foundation
 import AVFoundation
+import os
 
 /// AudioRecorder manages high-quality audio recording using AVAudioEngine
 ///
@@ -28,7 +29,13 @@ class AudioRecorder {
     // MARK: - Properties
 
     /// The audio engine used for recording
-    private let audioEngine = AVAudioEngine()
+    ///
+    /// Replaced for every recording. A failed start leaves an engine that never
+    /// recovers - verified on a Bluetooth microphone, where reset() and further
+    /// start attempts on the same instance keep failing while a fresh instance
+    /// succeeds - and a new engine also re-reads the current input device format
+    /// instead of reusing a stale one.
+    private var audioEngine = AVAudioEngine()
 
     /// Accumulated audio buffers during recording (nonisolated for audio callback thread access)
     private nonisolated(unsafe) var audioBuffers: [AVAudioPCMBuffer] = []
@@ -40,7 +47,28 @@ class AudioRecorder {
     private var recordingFormat: AVAudioFormat?
 
     /// Audio converter for resampling from hardware format to recording format
-    private var audioConverter: AVAudioConverter?
+    private nonisolated(unsafe) var audioConverter: AVAudioConverter?
+
+    /// Format the current converter was built for (audio thread access)
+    private nonisolated(unsafe) var converterSourceFormat: AVAudioFormat?
+
+    /// Start attempts allowed while the input device is switching rate
+    private static let engineStartAttempts = 4
+
+    /// Pause between start attempts
+    private static let engineStartRetryDelay: TimeInterval = 0.12
+
+    /// kAudioUnitErr_FormatNotSupported, reported while the device is switching
+    private static let formatNotSupported = -10868
+
+    /// Capture restarts allowed within one recording
+    private static let maximumCaptureRestarts = 3
+
+    /// Restarts used by the current recording
+    private var captureRestarts = 0
+
+    /// Observer of the running engine's configuration changes
+    private var configurationObserver: NSObjectProtocol?
 
     /// Whether recording is currently active
     private(set) var isRecording = false
@@ -61,6 +89,9 @@ class AudioRecorder {
     }
 
     deinit {
+        if let observer = configurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         if isRecording {
             // Stop recording without returning data (deinit can't be async)
             audioEngine.stop()
@@ -118,7 +149,7 @@ class AudioRecorder {
             return
         }
 
-        guard let recordingFormat = recordingFormat else {
+        guard recordingFormat != nil else {
             throw AudioRecorderError.invalidFormat
         }
 
@@ -130,49 +161,41 @@ class AudioRecorder {
         // Note: On macOS, we don't need to configure audio session like on iOS
         // The system handles microphone access and will prompt for permission if needed
 
-        // Get the input node from the audio engine
-        let inputNode = audioEngine.inputNode
+        captureRestarts = 0
 
-        // Remove a tap left behind by an interrupted recording; installing a
-        // second tap on the same bus throws an Objective-C exception
-        inputNode.removeTap(onBus: 0)
+        try startCapture()
 
-        // Use the node's OUTPUT format for the tap.
-        // AVAudioEngine requires the tap format to match what the node emits.
-        // The hardware input format (inputFormat(forBus:)) can differ from it -
-        // for example on Bluetooth headsets or after another engine has used the
-        // same microphone - and the mismatch throws an Objective-C exception
-        // ("Input HW format and tap format not matching") that Swift cannot catch.
-        let hardwareFormat = inputNode.outputFormat(forBus: 0)
-        print("ℹ️ Input node format: \(hardwareFormat.sampleRate)Hz, \(hardwareFormat.channelCount) channel(s)")
+        isRecording = true
+        print("🎤 Recording started")
+        AppLog.dictation.info("Recording started")
+    }
 
-        // An unavailable or still-changing input device reports a zero format.
-        // Fail with a clear error instead of letting the tap throw.
-        guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else {
-            print("❌ Input device reported an unusable format - is a microphone connected?")
-            throw AudioRecorderError.inputDeviceUnavailable
+    /// Open the input device and install the tap
+    ///
+    /// Separate from `startRecording` so that a device switch mid-recording can
+    /// reopen the device without discarding what has been captured so far.
+    private func startCapture() throws {
+        guard let recordingFormat = recordingFormat else {
+            throw AudioRecorderError.invalidFormat
         }
 
-        // Create audio converter if hardware format doesn't match recording format
-        // This handles sample rate conversion (e.g., 48kHz → 16kHz) and channel count (stereo → mono)
-        if hardwareFormat.sampleRate != recordingFormat.sampleRate ||
-           hardwareFormat.channelCount != recordingFormat.channelCount {
-            guard let converter = AVAudioConverter(from: hardwareFormat, to: recordingFormat) else {
-                throw AudioRecorderError.invalidFormat
-            }
-            audioConverter = converter
-            print("ℹ️ Audio converter created: \(hardwareFormat.sampleRate)Hz → \(recordingFormat.sampleRate)Hz, \(hardwareFormat.channelCount) → \(recordingFormat.channelCount) channels")
-        }
-
-        // Install tap on input node to capture audio buffers
-        // IMPORTANT: Tap format must match hardware format, we'll convert to recording format in the callback
-        // Buffer size 1024 provides good balance between latency and efficiency
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: hardwareFormat) { [weak self] buffer, time in
+        // Install the tap WITHOUT a format.
+        //
+        // Passing a format makes AVAudioEngine set the node's output format,
+        // and on a Bluetooth microphone neither candidate is accepted: the
+        // hardware runs at 24 kHz while the node claims 48 kHz, so both raise
+        // the Objective-C exception "Input HW format and tap format not
+        // matching", which Swift cannot catch - recording then died silently
+        // and only AppKit logged it. With nil the tap delivers the node's own
+        // format and the callback converts buffer.format to 16 kHz mono.
+        //
+        // Buffer size 1024 balances latency and efficiency.
+        let tapBlock: AVAudioNodeTapBlock = { [weak self] buffer, time in
             guard let self = self else { return }
 
             // Convert buffer from hardware format to recording format if needed
             let processedBuffer: AVAudioPCMBuffer
-            if let converter = self.audioConverter, let recordingFormat = self.recordingFormat {
+            if let converter = self.converter(from: buffer.format, to: recordingFormat) {
                 // Calculate the output frame capacity
                 // Conversion ratio: outputFrames = inputFrames * (outputRate / inputRate)
                 let outputCapacity = AVAudioFrameCount(Double(buffer.frameLength) * recordingFormat.sampleRate / buffer.format.sampleRate)
@@ -226,17 +249,136 @@ class AudioRecorder {
             }
         }
 
-        // Start the audio engine
-        do {
-            try audioEngine.start()
-            isRecording = true
-            print("🎤 Recording started")
-        } catch {
-            // Clean up tap if engine start fails
-            inputNode.removeTap(onBus: 0)
-            print("❌ Failed to start audio engine: \(error.localizedDescription)")
-            throw AudioRecorderError.engineStartFailed(error)
+        // Release the engine of a previous recording before opening the device
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+
+        // Start on a fresh engine, retrying while the input device settles.
+        //
+        // AirPods switch the microphone link from 48 kHz to 24 kHz when the
+        // input is opened. During that window the node's own formats
+        // contradict each other (hardware 24 kHz, node 48 kHz) and the engine
+        // refuses to start with error -10868. The second attempt succeeds, so
+        // a few tries turn a dead dictation into a delay of a few hundred
+        // milliseconds. Each attempt needs its own engine: a failed one stays
+        // broken.
+        var startError: Error?
+        for attempt in 1...Self.engineStartAttempts {
+            let engine = AVAudioEngine()
+            let inputNode = engine.inputNode
+            let hardwareFormat = inputNode.inputFormat(forBus: 0)
+            let nodeFormat = inputNode.outputFormat(forBus: 0)
+
+            audioConverter = nil
+            converterSourceFormat = nil
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil, block: tapBlock)
+
+            do {
+                try engine.start()
+                audioEngine = engine
+                observeConfigurationChanges(of: engine)
+                startError = nil
+                print("ℹ️ Input hardware \(hardwareFormat.sampleRate)Hz, node \(nodeFormat.sampleRate)Hz, \(nodeFormat.channelCount) channel(s)")
+                AppLog.dictation.info("Attempt \(attempt, privacy: .public) started, hardware \(hardwareFormat.sampleRate, privacy: .public) Hz, node \(nodeFormat.sampleRate, privacy: .public) Hz \(nodeFormat.channelCount, privacy: .public) ch")
+                break
+            } catch {
+                startError = error
+                inputNode.removeTap(onBus: 0)
+                engine.stop()
+                let code = (error as NSError).code
+                print("⚠️ Audio engine start attempt \(attempt) failed (\(code)), hardware \(hardwareFormat.sampleRate)Hz, node \(nodeFormat.sampleRate)Hz")
+                AppLog.dictation.error("Attempt \(attempt, privacy: .public) failed with \(code, privacy: .public), hardware \(hardwareFormat.sampleRate, privacy: .public) Hz, node \(nodeFormat.sampleRate, privacy: .public) Hz")
+                if attempt < Self.engineStartAttempts {
+                    Thread.sleep(forTimeInterval: Self.engineStartRetryDelay)
+                }
+            }
         }
+
+        if let startError {
+            print("❌ Failed to start audio engine: \(startError.localizedDescription)")
+            AppLog.dictation.error("Audio engine failed to start: \(startError.localizedDescription, privacy: .public)")
+            // A device that never accepts its own format is unusable for
+            // recording; say that instead of showing a Core Audio code
+            if (startError as NSError).code == Self.formatNotSupported {
+                throw AudioRecorderError.inputDeviceUnavailable
+            }
+            throw AudioRecorderError.engineStartFailed(startError)
+        }
+
+    }
+
+    /// Watch for input device changes under the running engine
+    private func observeConfigurationChanges(of engine: AVAudioEngine) {
+        if let observer = configurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleConfigurationChange()
+            }
+        }
+    }
+
+    /// Reopen the device when its configuration changes while recording
+    ///
+    /// AirPods switch their microphone link as the input is opened. The engine
+    /// then starts but delivers no buffers at all, which looked like a
+    /// successful recording that happened to contain no speech. The
+    /// notification arrives exactly at that switch, and a fresh engine captures
+    /// normally, so the recording continues with only a short gap.
+    private func handleConfigurationChange() {
+        guard isRecording else { return }
+        guard captureRestarts < Self.maximumCaptureRestarts else {
+            AppLog.dictation.error("Input configuration changed again; not restarting")
+            return
+        }
+
+        captureRestarts += 1
+        print("🔄 Input device configuration changed - restarting capture (\(captureRestarts))")
+        AppLog.dictation.info("Input configuration changed, restarting capture \(self.captureRestarts, privacy: .public)")
+
+        do {
+            try startCapture()
+        } catch {
+            print("❌ Capture restart failed: \(error.localizedDescription)")
+            AppLog.dictation.error("Capture restart failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Converter from the tap's format to the 16 kHz mono recording format
+    ///
+    /// The tap chooses its own format, so the converter cannot be built before
+    /// the first buffer arrives. It is cached and rebuilt only if the format
+    /// changes while recording. Returns nil when the buffers already match the
+    /// recording format and no conversion is needed.
+    ///
+    /// Called from the audio thread, which delivers buffers serially.
+    private nonisolated func converter(from source: AVAudioFormat, to target: AVAudioFormat) -> AVAudioConverter? {
+        guard source.sampleRate != target.sampleRate || source.channelCount != target.channelCount else {
+            return nil
+        }
+
+        if let existing = audioConverter, let known = converterSourceFormat,
+           known.sampleRate == source.sampleRate, known.channelCount == source.channelCount {
+            return existing
+        }
+
+        guard let converter = AVAudioConverter(from: source, to: target) else {
+            print("⚠️ Failed to create audio converter from \(source.sampleRate)Hz")
+            AppLog.dictation.error("Failed to create audio converter from \(source.sampleRate, privacy: .public) Hz")
+            return nil
+        }
+        // Mix multi-channel input down instead of keeping only the first channel
+        converter.downmix = true
+        audioConverter = converter
+        converterSourceFormat = source
+        print("ℹ️ Audio converter: \(source.sampleRate)Hz \(source.channelCount)ch → \(target.sampleRate)Hz \(target.channelCount)ch")
+        AppLog.dictation.info("Audio converter \(source.sampleRate, privacy: .public) Hz \(source.channelCount, privacy: .public) ch to \(target.sampleRate, privacy: .public) Hz")
+        return converter
     }
 
     /// Stop recording and return the recorded audio as Data
@@ -249,6 +391,10 @@ class AudioRecorder {
         }
 
         // Stop the audio engine
+        if let observer = configurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configurationObserver = nil
+        }
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
 
@@ -421,7 +567,7 @@ enum AudioRecorderError: LocalizedError {
         case .invalidFormat:
             return "Audio recording format is invalid"
         case .inputDeviceUnavailable:
-            return "No usable microphone input. Check that a microphone is connected and selected in System Settings → Sound."
+            return "The microphone did not accept recording. If you use Bluetooth headphones, try again in a moment or pick another input in System Settings → Sound."
         case .engineStartFailed(let error):
             return "Failed to start audio engine: \(error.localizedDescription)"
         case .notRecording:

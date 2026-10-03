@@ -9,6 +9,7 @@
 import Foundation
 import AppKit
 import HotKey
+import os
 
 /// Manages global hotkey registration for triggering voice recording
 ///
@@ -147,9 +148,11 @@ class HotkeyManager {
         // Verify hotkey was registered successfully
         if hotkey != nil {
             print("✅ Global hotkey registered: \(displayString)")
+            AppLog.dictation.info("Global hotkey registered: \(displayString, privacy: .public)")
         } else {
             // Hotkey registration failed (key combination already in use)
             print("⚠️ Failed to register global hotkey \(displayString)")
+            AppLog.dictation.error("Failed to register global hotkey \(displayString, privacy: .public)")
             print("   This usually means the hotkey is already in use by another app or system shortcut")
         }
     }
@@ -178,11 +181,13 @@ class HotkeyManager {
             // Dictation is disabled while a meeting is being transcribed
             guard !MeetingSession.shared.isActive else {
                 print("⏭️ Hotkey ignored - meeting transcription is running")
+                AppLog.dictation.info("Hotkey ignored, meeting transcription is running")
                 return
             }
 
             // Get current recording state
             let currentState = appState.recordingState
+            AppLog.dictation.info("Hotkey pressed, state is \(String(describing: currentState), privacy: .public)")
 
             switch currentState {
             case .idle:

@@ -9,6 +9,7 @@
 
 import SwiftUI
 import Combine
+import os
 
 /// Central application state manager
 ///
@@ -297,6 +298,7 @@ class AppState: ObservableObject {
         // Check if already recording
         guard case .idle = recordingState else {
             print("⚠️ Cannot start recording - current state: \(recordingState)")
+            AppLog.dictation.error("Start refused, state is \(String(describing: self.recordingState), privacy: .public)")
             return
         }
 
@@ -307,6 +309,7 @@ class AppState: ObservableObject {
         // Microphone is required - block recording if denied (Story 8.3 AC 2)
         if microphoneStatus == .denied {
             print("❌ Cannot start recording - microphone permission denied")
+            AppLog.dictation.error("Start refused, microphone permission denied")
             print("   User needs to grant permission in System Settings → Privacy & Security → Microphone")
 
             // Story 8.3: Show user-friendly alert with "Open System Settings" button
@@ -335,14 +338,17 @@ class AppState: ObservableObject {
         // state subscriptions are ready before this first state change (Story 3.7)
         recordingState = .recording(startTime: Date.now)
         print("🎤 Starting recording...")
+        AppLog.dictation.info("Starting recording")
 
         // Start audio recorder
         do {
             try audioRecorder.startRecording()
             print("✅ Recording started successfully")
+            AppLog.dictation.info("Recording started")
         } catch {
             // Recording failed - revert state and publish error
             print("❌ Failed to start recording: \(error.localizedDescription)")
+            AppLog.dictation.error("Recording failed to start: \(error.localizedDescription, privacy: .public)")
             recordingState = .idle
             lastError = error
         }
