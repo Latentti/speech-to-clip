@@ -133,10 +133,25 @@ class AudioRecorder {
         // Get the input node from the audio engine
         let inputNode = audioEngine.inputNode
 
-        // Get the hardware format from the input node
-        // The tap format MUST match the hardware format
-        let hardwareFormat = inputNode.inputFormat(forBus: 0)
-        print("ℹ️ Hardware format: \(hardwareFormat.sampleRate)Hz, \(hardwareFormat.channelCount) channel(s)")
+        // Remove a tap left behind by an interrupted recording; installing a
+        // second tap on the same bus throws an Objective-C exception
+        inputNode.removeTap(onBus: 0)
+
+        // Use the node's OUTPUT format for the tap.
+        // AVAudioEngine requires the tap format to match what the node emits.
+        // The hardware input format (inputFormat(forBus:)) can differ from it -
+        // for example on Bluetooth headsets or after another engine has used the
+        // same microphone - and the mismatch throws an Objective-C exception
+        // ("Input HW format and tap format not matching") that Swift cannot catch.
+        let hardwareFormat = inputNode.outputFormat(forBus: 0)
+        print("ℹ️ Input node format: \(hardwareFormat.sampleRate)Hz, \(hardwareFormat.channelCount) channel(s)")
+
+        // An unavailable or still-changing input device reports a zero format.
+        // Fail with a clear error instead of letting the tap throw.
+        guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else {
+            print("❌ Input device reported an unusable format - is a microphone connected?")
+            throw AudioRecorderError.inputDeviceUnavailable
+        }
 
         // Create audio converter if hardware format doesn't match recording format
         // This handles sample rate conversion (e.g., 48kHz → 16kHz) and channel count (stereo → mono)
@@ -394,6 +409,7 @@ class AudioRecorder {
 /// Errors that can occur during audio recording
 enum AudioRecorderError: LocalizedError {
     case invalidFormat
+    case inputDeviceUnavailable
     case engineStartFailed(Error)
     case notRecording
     case noAudioData
@@ -404,6 +420,8 @@ enum AudioRecorderError: LocalizedError {
         switch self {
         case .invalidFormat:
             return "Audio recording format is invalid"
+        case .inputDeviceUnavailable:
+            return "No usable microphone input. Check that a microphone is connected and selected in System Settings → Sound."
         case .engineStartFailed(let error):
             return "Failed to start audio engine: \(error.localizedDescription)"
         case .notRecording:
